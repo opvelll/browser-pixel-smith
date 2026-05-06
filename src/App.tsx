@@ -20,6 +20,7 @@ function App() {
     isProcessing,
     openExpanded,
     previewImage,
+    resetConfig,
     setExpandedImage,
     updateConfig,
   } = usePixelSnapperWorkspace()
@@ -111,6 +112,7 @@ function App() {
           isProcessing={isProcessing}
           onApply={applyProcessing}
           onDownload={downloadCurrentImage}
+          onResetConfig={resetConfig}
           onUpdateConfig={updateConfig}
         />
       </section>

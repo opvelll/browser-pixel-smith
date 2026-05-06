@@ -13,9 +13,10 @@ export function ParameterRow({
 }) {
   return (
     <label
-      className={`grid items-center gap-2 px-2 py-1.5 text-xs ${
+      className={`group relative grid items-center gap-2 px-2 py-1.5 text-xs ${
         isPrimary ? 'grid-cols-[74px_minmax(0,1fr)_58px]' : 'grid-cols-[92px_minmax(0,1fr)]'
       }`}
+      title={field.description}
     >
       <span className="truncate text-[11px] font-medium text-zinc-600">{field.label}</span>
       {isPrimary ? (
@@ -24,6 +25,7 @@ export function ParameterRow({
           max={field.max}
           min={field.min}
           step={field.step}
+          title={field.description}
           type="range"
           value={value}
           onChange={(event) => onChange(Number(event.target.value))}
@@ -34,10 +36,17 @@ export function ParameterRow({
         max={field.max}
         min={field.min}
         step={field.step}
+        title={field.description}
         type="number"
         value={value}
         onChange={(event) => onChange(Number(event.target.value))}
       />
+      <span
+        className="pointer-events-none absolute left-2 top-[calc(100%-2px)] z-20 hidden max-w-[240px] rounded-sm border border-zinc-800 bg-zinc-950 px-2 py-1.5 text-[11px] leading-4 text-white shadow-lg group-hover:block group-focus-within:block"
+        role="tooltip"
+      >
+        {field.description}
+      </span>
     </label>
   )
 }

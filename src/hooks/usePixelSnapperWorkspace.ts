@@ -62,6 +62,10 @@ export function usePixelSnapperWorkspace() {
     setConfig((nextConfig) => ({ ...nextConfig, [key]: value }))
   }
 
+  const resetConfig = () => {
+    setConfig(defaultPixelSnapperConfig)
+  }
+
   const applyProcessing = () => {
     if (!currentImage || isProcessing) {
       return
@@ -122,6 +126,7 @@ export function usePixelSnapperWorkspace() {
     isProcessing,
     openExpanded,
     previewImage,
+    resetConfig,
     setExpandedImage,
     updateConfig,
   }

@@ -1,4 +1,4 @@
-import { Check, Download, SlidersHorizontal, Zap } from 'lucide-react'
+import { Check, Download, RotateCcw, SlidersHorizontal, Zap } from 'lucide-react'
 import { PIXEL_SNAPPER_CONTROL_FIELDS } from '../config/pixelSnapperControls'
 import type { PixelSnapperConfig } from '../pixelSnapper'
 import { ParameterRow } from './ParameterRow'
@@ -10,6 +10,7 @@ export function ProcessSidebar({
   isProcessing,
   onApply,
   onDownload,
+  onResetConfig,
   onUpdateConfig,
 }: {
   config: PixelSnapperConfig
@@ -18,6 +19,7 @@ export function ProcessSidebar({
   isProcessing: boolean
   onApply: () => void
   onDownload: () => void
+  onResetConfig: () => void
   onUpdateConfig: (key: keyof PixelSnapperConfig, value: number) => void
 }) {
   const [primaryField, ...secondaryFields] = PIXEL_SNAPPER_CONTROL_FIELDS
@@ -29,15 +31,26 @@ export function ProcessSidebar({
           <SlidersHorizontal size={14} />
           Process
         </div>
-        <button
-          className="inline-flex h-6 w-6 items-center justify-center rounded border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-40"
-          disabled={!hasImage || isProcessing}
-          title="Download current image"
-          type="button"
-          onClick={onDownload}
-        >
-          <Download size={13} />
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            className="inline-flex h-6 w-6 items-center justify-center rounded border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-40"
+            disabled={isProcessing}
+            title="パラメータを初期値に戻す"
+            type="button"
+            onClick={onResetConfig}
+          >
+            <RotateCcw size={13} />
+          </button>
+          <button
+            className="inline-flex h-6 w-6 items-center justify-center rounded border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-40"
+            disabled={!hasImage || isProcessing}
+            title="Download current image"
+            type="button"
+            onClick={onDownload}
+          >
+            <Download size={13} />
+          </button>
+        </div>
       </div>
 
       <div className="border-b border-zinc-300">
