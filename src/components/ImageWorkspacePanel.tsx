@@ -1,4 +1,4 @@
-import { ImagePlus, Maximize2, Zap } from 'lucide-react'
+import { ImagePlus, Maximize2, Target, Zap } from 'lucide-react'
 import type { DragEvent, RefObject } from 'react'
 
 export function ImageWorkspacePanel({
@@ -14,6 +14,7 @@ export function ImageWorkspacePanel({
   onDragOver,
   onDrop,
   onExpand,
+  onSetAsTarget,
 }: {
   canvasRef: RefObject<HTMLCanvasElement | null>
   fileInputRef?: RefObject<HTMLInputElement | null>
@@ -27,6 +28,7 @@ export function ImageWorkspacePanel({
   onDragOver?: (event: DragEvent<HTMLDivElement>) => void
   onDrop?: (event: DragEvent<HTMLDivElement>) => void
   onExpand?: () => void
+  onSetAsTarget?: () => void
 }) {
   const isEmpty = !image
 
@@ -38,6 +40,17 @@ export function ImageWorkspacePanel({
           <span className="truncate text-[11px] text-zinc-500">{meta}</span>
         </div>
         <div className="flex items-center gap-1">
+          {onSetAsTarget ? (
+            <button
+              className="inline-flex h-6 w-6 items-center justify-center rounded border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-40"
+              disabled={isEmpty}
+              title="Set result as target"
+              type="button"
+              onClick={onSetAsTarget}
+            >
+              <Target size={13} />
+            </button>
+          ) : null}
           {fileInputRef ? (
             <button
               className="inline-flex h-6 w-6 items-center justify-center rounded border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100"

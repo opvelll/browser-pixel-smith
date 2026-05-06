@@ -22,6 +22,7 @@ function App() {
     previewImage,
     resetConfig,
     setExpandedImage,
+    setResultAsTarget,
     updateConfig,
   } = usePixelSnapperWorkspace()
   const [isDragging, setIsDragging] = useState(false)
@@ -102,6 +103,7 @@ function App() {
                 ? () => openExpanded('Result', currentImage.fileName, previewImage)
                 : undefined
             }
+            onSetAsTarget={previewImage ? setResultAsTarget : undefined}
           />
         </div>
 

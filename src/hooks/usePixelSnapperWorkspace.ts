@@ -79,7 +79,6 @@ export function usePixelSnapperWorkspace() {
         const processed = processPixelSnap(currentImage.imageData, config)
         const nextLabel = `Pixel Snap #${history.length}`
         setPreviewImage(processed)
-        setCurrentImage({ ...currentImage, imageData: processed })
         pushHistory(nextLabel, currentImage.fileName, processed)
       } catch (processingError) {
         setPreviewImage(null)
@@ -88,6 +87,16 @@ export function usePixelSnapperWorkspace() {
         setIsProcessing(false)
       }
     }, 0)
+  }
+
+  const setResultAsTarget = () => {
+    if (!currentImage || !previewImage || isProcessing) {
+      return
+    }
+
+    setCurrentImage({ ...currentImage, imageData: cloneImageData(previewImage) })
+    setPreviewImage(null)
+    setError(null)
   }
 
   const downloadCurrentImage = () => {
@@ -128,6 +137,7 @@ export function usePixelSnapperWorkspace() {
     previewImage,
     resetConfig,
     setExpandedImage,
+    setResultAsTarget,
     updateConfig,
   }
 }
