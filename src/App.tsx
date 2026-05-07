@@ -9,8 +9,8 @@ import { drawImageData } from './lib/imageData'
 
 function App() {
   const {
+    activeMethod,
     applyProcessing,
-    config,
     currentImage,
     downloadCurrentImage,
     error,
@@ -19,10 +19,15 @@ function App() {
     history,
     isProcessing,
     openExpanded,
+    pixelSnapConfig,
     previewImage,
-    resetConfig,
+    resetActiveConfig,
+    resizeConfig,
     setExpandedImage,
+    setActiveMethod,
     setResultAsTarget,
+    updateResizeAlgorithm,
+    updateResizeScale,
     updateConfig,
   } = usePixelSnapperWorkspace()
   const [isDragging, setIsDragging] = useState(false)
@@ -108,13 +113,18 @@ function App() {
         </div>
 
         <ProcessSidebar
-          config={config}
+          activeMethod={activeMethod}
           error={error}
           hasImage={Boolean(currentImage)}
           isProcessing={isProcessing}
+          pixelSnapConfig={pixelSnapConfig}
+          resizeConfig={resizeConfig}
           onApply={applyProcessing}
           onDownload={downloadCurrentImage}
-          onResetConfig={resetConfig}
+          onResetConfig={resetActiveConfig}
+          onSelectMethod={setActiveMethod}
+          onUpdateResizeAlgorithm={updateResizeAlgorithm}
+          onUpdateResizeScale={updateResizeScale}
           onUpdateConfig={updateConfig}
         />
       </section>

@@ -1,4 +1,11 @@
-import type { PixelSnapperControlField } from '../config/pixelSnapperControls'
+export type NumericControlField<TKey extends string = string> = {
+  key: TKey
+  label: string
+  description: string
+  min: number
+  max: number
+  step: number
+}
 
 export function ParameterRow({
   field,
@@ -6,7 +13,7 @@ export function ParameterRow({
   value,
   onChange,
 }: {
-  field: PixelSnapperControlField
+  field: NumericControlField
   isPrimary?: boolean
   value: number
   onChange: (value: number) => void
