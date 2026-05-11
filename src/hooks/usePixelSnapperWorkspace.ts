@@ -67,6 +67,16 @@ export function usePixelSnapperWorkspace() {
     }
   }
 
+  const setImageAsTarget = (fileName: string, imageData: ImageData) => {
+    const loaded = { fileName, imageData: cloneImageData(imageData) }
+    nextHistoryIdRef.current = 1
+    setCurrentImage(loaded)
+    setPreviewImage(null)
+    setError(null)
+    setHistory([])
+    pushHistory('Original', fileName, imageData)
+  }
+
   const updateConfig = (key: keyof PixelSnapperConfig, rawValue: number) => {
     const field = PIXEL_SNAPPER_CONTROL_FIELDS.find((candidate) => candidate.key === key)
     const min = field?.min ?? Number.NEGATIVE_INFINITY
@@ -172,6 +182,7 @@ export function usePixelSnapperWorkspace() {
     resizeConfig,
     setExpandedImage,
     setActiveMethod,
+    setImageAsTarget,
     setResultAsTarget,
     updateResizeAlgorithm,
     updateResizeScale,

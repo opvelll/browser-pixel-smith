@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { ExpandedImageDialog } from './components/ExpandedImageDialog'
 import { HistoryStrip } from './components/HistoryStrip'
 import { ImageWorkspacePanel } from './components/ImageWorkspacePanel'
+import { ModelCaptureDialog } from './components/ModelCaptureDialog'
 import { ProcessSidebar } from './components/ProcessSidebar'
 import { usePixelSnapperWorkspace } from './hooks/usePixelSnapperWorkspace'
 import { drawImageData } from './lib/imageData'
@@ -25,12 +26,14 @@ function App() {
     resizeConfig,
     setExpandedImage,
     setActiveMethod,
+    setImageAsTarget,
     setResultAsTarget,
     updateResizeAlgorithm,
     updateResizeScale,
     updateConfig,
   } = usePixelSnapperWorkspace()
   const [isDragging, setIsDragging] = useState(false)
+  const [isModelCaptureOpen, setIsModelCaptureOpen] = useState(false)
   const currentCanvasRef = useRef<HTMLCanvasElement>(null)
   const previewCanvasRef = useRef<HTMLCanvasElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -90,6 +93,7 @@ function App() {
                 ? () => openExpanded('Target', currentImage.fileName, currentImage.imageData)
                 : undefined
             }
+            onOpen3dCapture={() => setIsModelCaptureOpen(true)}
           />
           <ImageWorkspacePanel
             canvasRef={previewCanvasRef}
@@ -140,6 +144,16 @@ function App() {
           imageData={expandedImage.imageData}
           label={expandedImage.label}
           onClose={() => setExpandedImage(null)}
+        />
+      ) : null}
+
+      {isModelCaptureOpen ? (
+        <ModelCaptureDialog
+          onCapture={(fileName, imageData) => {
+            setImageAsTarget(fileName, imageData)
+            setIsModelCaptureOpen(false)
+          }}
+          onClose={() => setIsModelCaptureOpen(false)}
         />
       ) : null}
     </main>
