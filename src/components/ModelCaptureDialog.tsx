@@ -1,5 +1,5 @@
 import { Camera, Upload, X } from 'lucide-react'
-import { useEffect, useRef, useState, type DragEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type DragEvent } from 'react'
 import {
   AmbientLight,
   Box3,
@@ -8,6 +8,7 @@ import {
   Group,
   Mesh,
   Object3D,
+  OrthographicCamera,
   PerspectiveCamera,
   Scene,
   Vector3,
@@ -18,6 +19,24 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { IconButton } from './IconButton'
 
 const CAPTURE_SIZE = 1024
+const DEFAULT_FOCAL_LENGTH = 120
+const MIN_FOCAL_LENGTH = 24
+const MAX_FOCAL_LENGTH = 200
+const ROTATION_SNAP_RADIANS = Math.PI / 8
+const MODEL_PADDING = 1.35
+
+type ProjectionMode = 'perspective' | 'orthographic'
+type CaptureCamera = PerspectiveCamera | OrthographicCamera
+type ModelFrame = {
+  maxDim: number
+}
+type RotationDrag = {
+  pointerId: number
+  startX: number
+  startY: number
+  startRotationX: number
+  startRotationY: number
+}
 
 export function ModelCaptureDialog({
   onCapture,
@@ -30,14 +49,48 @@ export function ModelCaptureDialog({
   const containerRef = useRef<HTMLDivElement>(null)
   const rendererRef = useRef<WebGLRenderer | null>(null)
   const sceneRef = useRef<Scene | null>(null)
-  const cameraRef = useRef<PerspectiveCamera | null>(null)
+  const cameraRef = useRef<CaptureCamera | null>(null)
   const modelRef = useRef<Object3D | null>(null)
   const modelFileNameRef = useRef<string | null>(null)
+  const modelFrameRef = useRef<ModelFrame | null>(null)
+  const projectionModeRef = useRef<ProjectionMode>('perspective')
+  const focalLengthRef = useRef(DEFAULT_FOCAL_LENGTH)
+  const rotationDragRef = useRef<RotationDrag | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [isDragging, setIsDragging] = useState(false)
   const [hasModel, setHasModel] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [modelName, setModelName] = useState<string | null>(null)
+  const [projectionMode, setProjectionMode] = useState<ProjectionMode>('perspective')
+  const [focalLength, setFocalLength] = useState(DEFAULT_FOCAL_LENGTH)
+
+  const renderScene = useCallback(() => {
+    const renderer = rendererRef.current
+    const scene = sceneRef.current
+    const camera = cameraRef.current
+    if (!renderer || !scene || !camera) {
+      return
+    }
+    renderer.render(scene, camera)
+  }, [])
+
+  const updateCamera = useCallback(() => {
+    const container = containerRef.current
+    if (!container) {
+      return
+    }
+
+    const width = Math.max(container.clientWidth, 1)
+    const height = Math.max(container.clientHeight, 1)
+    const camera = createCamera(
+      projectionModeRef.current,
+      width / height,
+      focalLengthRef.current,
+      modelFrameRef.current,
+    )
+    cameraRef.current = camera
+    renderScene()
+  }, [renderScene])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -49,8 +102,12 @@ export function ModelCaptureDialog({
     const scene = new Scene()
     sceneRef.current = scene
 
-    const camera = new PerspectiveCamera(35, 1, 0.1, 1000)
-    camera.position.set(0, 0, 4)
+    const camera = createCamera(
+      projectionModeRef.current,
+      1,
+      focalLengthRef.current,
+      modelFrameRef.current,
+    )
     cameraRef.current = camera
 
     const ambient = new AmbientLight(0xffffff, 1.8)
@@ -69,18 +126,12 @@ export function ModelCaptureDialog({
     renderer.setClearColor(new Color(0x000000), 0)
     rendererRef.current = renderer
 
-    const renderScene = () => {
-      renderer.render(scene, camera)
-    }
-
     const resize = () => {
       const width = Math.max(container.clientWidth, 1)
       const height = Math.max(container.clientHeight, 1)
       renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2))
       renderer.setSize(width, height, false)
-      camera.aspect = width / height
-      camera.updateProjectionMatrix()
-      renderScene()
+      updateCamera()
     }
 
     resize()
@@ -103,18 +154,19 @@ export function ModelCaptureDialog({
       sceneRef.current = null
       cameraRef.current = null
       modelRef.current = null
+      modelFrameRef.current = null
     }
-  }, [onClose])
+  }, [onClose, updateCamera])
 
-  const renderScene = () => {
-    const renderer = rendererRef.current
-    const scene = sceneRef.current
-    const camera = cameraRef.current
-    if (!renderer || !scene || !camera) {
-      return
-    }
-    renderer.render(scene, camera)
-  }
+  useEffect(() => {
+    projectionModeRef.current = projectionMode
+    updateCamera()
+  }, [projectionMode, updateCamera])
+
+  useEffect(() => {
+    focalLengthRef.current = focalLength
+    updateCamera()
+  }, [focalLength, updateCamera])
 
   const loadModelFile = async (file: File) => {
     const extension = file.name.split('.').pop()?.toLowerCase()
@@ -124,8 +176,7 @@ export function ModelCaptureDialog({
     }
 
     const scene = sceneRef.current
-    const camera = cameraRef.current
-    if (!scene || !camera) {
+    if (!scene || !cameraRef.current) {
       setError('3D renderer is not ready')
       return
     }
@@ -146,7 +197,8 @@ export function ModelCaptureDialog({
       }
 
       const model = gltf.scene
-      frameModel(model, camera)
+      modelFrameRef.current = frameModel(model)
+      updateCamera()
       scene.add(model)
       modelRef.current = model
       modelFileNameRef.current = captureFileName(file.name)
@@ -174,6 +226,46 @@ export function ModelCaptureDialog({
     }
   }
 
+  const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    const model = modelRef.current
+    if (!model || isLoading || event.button !== 0) {
+      return
+    }
+
+    rotationDragRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      startRotationX: model.rotation.x,
+      startRotationY: model.rotation.y,
+    }
+    event.currentTarget.setPointerCapture(event.pointerId)
+  }
+
+  const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    const drag = rotationDragRef.current
+    const model = modelRef.current
+    if (!drag || !model || drag.pointerId !== event.pointerId) {
+      return
+    }
+
+    const nextRotationY = drag.startRotationY + (event.clientX - drag.startX) * 0.012
+    const nextRotationX = drag.startRotationX + (event.clientY - drag.startY) * 0.012
+    model.rotation.y = snapRadians(nextRotationY)
+    model.rotation.x = snapRadians(nextRotationX)
+    renderScene()
+  }
+
+  const handlePointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
+    const drag = rotationDragRef.current
+    if (!drag || drag.pointerId !== event.pointerId) {
+      return
+    }
+
+    rotationDragRef.current = null
+    event.currentTarget.releasePointerCapture(event.pointerId)
+  }
+
   const captureModel = () => {
     const renderer = rendererRef.current
     const scene = sceneRef.current
@@ -189,9 +281,13 @@ export function ModelCaptureDialog({
 
     renderer.setPixelRatio(1)
     renderer.setSize(CAPTURE_SIZE, CAPTURE_SIZE, false)
-    camera.aspect = 1
-    camera.updateProjectionMatrix()
-    renderer.render(scene, camera)
+    cameraRef.current = createCamera(
+      projectionModeRef.current,
+      1,
+      focalLengthRef.current,
+      modelFrameRef.current,
+    )
+    renderer.render(scene, cameraRef.current)
 
     const outputCanvas = document.createElement('canvas')
     outputCanvas.width = CAPTURE_SIZE
@@ -207,9 +303,13 @@ export function ModelCaptureDialog({
 
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2))
     renderer.setSize(displayWidth, displayHeight, false)
-    camera.aspect = displayWidth / displayHeight
-    camera.updateProjectionMatrix()
-    renderer.render(scene, camera)
+    cameraRef.current = createCamera(
+      projectionModeRef.current,
+      displayWidth / displayHeight,
+      focalLengthRef.current,
+      modelFrameRef.current,
+    )
+    renderer.render(scene, cameraRef.current)
 
     onCapture(fileName, imageData)
   }
@@ -221,7 +321,7 @@ export function ModelCaptureDialog({
       className="fixed inset-0 z-50 flex flex-col bg-zinc-950 text-white"
       role="dialog"
     >
-      <div className="flex h-10 items-center justify-between border-b border-white/15 px-2 text-xs">
+      <div className="flex min-h-10 flex-wrap items-center justify-between gap-2 border-b border-white/15 px-2 py-1 text-xs">
         <div className="flex min-w-0 items-center gap-2">
           <span className="font-medium">3D Capture</span>
           <span className="truncate text-zinc-400">
@@ -229,7 +329,46 @@ export function ModelCaptureDialog({
           </span>
           <span className="text-zinc-400">{CAPTURE_SIZE} x {CAPTURE_SIZE}</span>
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 rounded-sm border border-white/15 bg-white/5 p-0.5">
+            <button
+              className={`h-6 rounded-sm px-2 text-[11px] ${
+                projectionMode === 'perspective'
+                  ? 'bg-white text-zinc-950'
+                  : 'text-zinc-300 hover:bg-white/10 hover:text-white'
+              }`}
+              type="button"
+              onClick={() => setProjectionMode('perspective')}
+            >
+              Perspective
+            </button>
+            <button
+              className={`h-6 rounded-sm px-2 text-[11px] ${
+                projectionMode === 'orthographic'
+                  ? 'bg-white text-zinc-950'
+                  : 'text-zinc-300 hover:bg-white/10 hover:text-white'
+              }`}
+              type="button"
+              onClick={() => setProjectionMode('orthographic')}
+            >
+              Parallel
+            </button>
+          </div>
+          <label className="flex items-center gap-2 text-[11px] text-zinc-300">
+            <span>Focal</span>
+            <input
+              aria-label="Focal length"
+              className="h-6 w-28 accent-cyan-300 disabled:opacity-40"
+              disabled={projectionMode === 'orthographic'}
+              max={MAX_FOCAL_LENGTH}
+              min={MIN_FOCAL_LENGTH}
+              step={1}
+              type="range"
+              value={focalLength}
+              onChange={(event) => setFocalLength(Number(event.target.value))}
+            />
+            <span className="w-10 text-right tabular-nums">{focalLength}mm</span>
+          </label>
           <button
             className="inline-flex h-7 items-center gap-1 rounded-sm border border-white/20 bg-white/10 px-2 text-[11px] text-white hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-40"
             disabled={!hasModel || isLoading}
@@ -257,8 +396,12 @@ export function ModelCaptureDialog({
         onDragLeave={() => setIsDragging(false)}
         onDragOver={(event) => event.preventDefault()}
         onDrop={handleDrop}
+        onPointerCancel={handlePointerUp}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
       >
-        <canvas ref={canvasRef} className="block h-full w-full" />
+        <canvas ref={canvasRef} className={`block h-full w-full ${hasModel ? 'cursor-grab' : ''}`} />
         {!hasModel ? (
           <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2 text-xs text-zinc-300">
             <Upload size={22} />
@@ -275,7 +418,44 @@ export function ModelCaptureDialog({
   )
 }
 
-function frameModel(model: Object3D, camera: PerspectiveCamera) {
+function createCamera(
+  projectionMode: ProjectionMode,
+  aspect: number,
+  focalLength: number,
+  modelFrame: ModelFrame | null,
+): CaptureCamera {
+  const maxDim = modelFrame?.maxDim ?? 1
+
+  if (projectionMode === 'orthographic') {
+    const viewHeight = maxDim * MODEL_PADDING
+    const viewWidth = viewHeight * aspect
+    const camera = new OrthographicCamera(
+      -viewWidth / 2,
+      viewWidth / 2,
+      viewHeight / 2,
+      -viewHeight / 2,
+      Math.max(maxDim / 100, 0.01),
+      maxDim * 100,
+    )
+    camera.position.set(0, 0, maxDim * 4)
+    camera.lookAt(0, 0, 0)
+    camera.updateProjectionMatrix()
+    return camera
+  }
+
+  const camera = new PerspectiveCamera(35, aspect, 0.1, 1000)
+  camera.setFocalLength(focalLength)
+  const fov = (camera.fov * Math.PI) / 180
+  const distance = (maxDim / (2 * Math.tan(fov / 2))) * MODEL_PADDING
+  camera.position.set(0, 0, distance)
+  camera.near = Math.max(distance / 100, 0.01)
+  camera.far = distance * 100
+  camera.lookAt(0, 0, 0)
+  camera.updateProjectionMatrix()
+  return camera
+}
+
+function frameModel(model: Object3D): ModelFrame {
   model.position.set(0, 0, 0)
   model.updateMatrixWorld(true)
 
@@ -289,13 +469,7 @@ function frameModel(model: Object3D, camera: PerspectiveCamera) {
   model.position.sub(center)
 
   const maxDim = Math.max(size.x, size.y, size.z, 1)
-  const fov = (camera.fov * Math.PI) / 180
-  const distance = (maxDim / (2 * Math.tan(fov / 2))) * 1.35
-  camera.position.set(0, 0, distance)
-  camera.near = Math.max(distance / 100, 0.01)
-  camera.far = distance * 100
-  camera.lookAt(0, 0, 0)
-  camera.updateProjectionMatrix()
+  return { maxDim }
 }
 
 function captureFileName(fileName: string) {
@@ -323,4 +497,8 @@ function disposeMaterial(material: Material | Material[]) {
     return
   }
   material.dispose()
+}
+
+function snapRadians(value: number) {
+  return Math.round(value / ROTATION_SNAP_RADIANS) * ROTATION_SNAP_RADIANS
 }
