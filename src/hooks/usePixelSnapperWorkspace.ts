@@ -5,6 +5,7 @@ import { applySelectionCutout } from '../lib/colorCutout'
 import { errorMessage } from '../lib/errors'
 import { cloneImageData, fileToImageData, imageDataToBlob } from '../lib/imageData'
 import { clamp } from '../lib/number'
+import { cropSelectionToImage } from '../lib/selectionCrop'
 import {
   defaultPixelSnapperConfig,
   type PixelSnapperConfig,
@@ -212,6 +213,23 @@ export function usePixelSnapperWorkspace() {
     }
   }
 
+  const applySelectionCrop = (selectionMask: Uint8Array) => {
+    if (!currentImage || isProcessing) {
+      return
+    }
+
+    try {
+      const croppedImage = cropSelectionToImage(currentImage.imageData, selectionMask)
+      const nextLabel = `Selection Crop #${history.length}`
+      setCurrentImage({ ...currentImage, imageData: croppedImage })
+      setPreviewImage(null)
+      setError(null)
+      pushHistory(nextLabel, currentImage.fileName, croppedImage)
+    } catch (cropError) {
+      setError(errorMessage(cropError))
+    }
+  }
+
   const openExpanded = (label: string, fileName: string, imageData: ImageData) => {
     setExpandedImage({ label, fileName, imageData })
   }
@@ -221,6 +239,7 @@ export function usePixelSnapperWorkspace() {
     applyProcessing,
     currentImage,
     applyColorCutout,
+    applySelectionCrop,
     downloadCurrentImage,
     downloadResultImage,
     downloadTargetImage,

@@ -2,14 +2,16 @@ import {
   Box,
   Download,
   ImagePlus,
+  LassoSelect,
   LoaderCircle,
   Maximize2,
   Pipette,
+  SquareDashedMousePointer,
   Scissors,
   Target,
   Zap,
 } from 'lucide-react'
-import type { DragEvent, RefObject } from 'react'
+import type { DragEvent, PointerEvent as ReactPointerEvent, RefObject } from 'react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   countSelectionPixels,
@@ -18,11 +20,17 @@ import {
   type RgbaColor,
 } from '../lib/colorCutout'
 import { drawImageData } from '../lib/imageData'
+import {
+  createLassoSelectionMask,
+  createRectangleSelectionMask,
+  type ImagePoint,
+} from '../lib/selectionCrop'
 
 const MIN_ZOOM = 0.1
 const MAX_ZOOM = 16
 const MIN_TOLERANCE = 0
 const MAX_TOLERANCE = 441
+type ToolMode = 'none' | 'color' | 'rectangle' | 'lasso'
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value))
@@ -114,6 +122,7 @@ export function ImageComparePanel({
   onDragOver,
   onDrop,
   onApplyColorCutout,
+  onApplySelectionCrop,
   onDownloadResult,
   onDownloadTarget,
   onExpandResult,
@@ -132,6 +141,7 @@ export function ImageComparePanel({
   onDragOver?: (event: DragEvent<HTMLDivElement>) => void
   onDrop?: (event: DragEvent<HTMLDivElement>) => void
   onApplyColorCutout?: (selectionMask: Uint8Array) => void
+  onApplySelectionCrop?: (selectionMask: Uint8Array) => void
   onDownloadResult?: () => void
   onDownloadTarget?: () => void
   onExpandResult?: () => void
@@ -147,21 +157,32 @@ export function ImageComparePanel({
   const [divider, setDivider] = useState(50)
   const [isSliding, setIsSliding] = useState(false)
   const [zoom, setZoom] = useState(1)
-  const [isCutoutMode, setIsCutoutMode] = useState(false)
+  const [toolMode, setToolMode] = useState<ToolMode>('none')
   const [selectedSample, setSelectedSample] = useState<{
     color: RgbaColor
     image: ImageData
   } | null>(null)
+  const [manualSelection, setManualSelection] = useState<{
+    image: ImageData
+    mask: Uint8Array
+  } | null>(null)
+  const [dragStart, setDragStart] = useState<ImagePoint | null>(null)
+  const [lassoPoints, setLassoPoints] = useState<ImagePoint[]>([])
   const [tolerance, setTolerance] = useState(24)
   const selectedColor = selectedSample?.image === targetImage ? selectedSample.color : null
+  const isSelectionTool = toolMode !== 'none'
+  const isShapeSelectionTool = toolMode === 'rectangle' || toolMode === 'lasso'
 
-  const selectionMask = useMemo(() => {
-    if (!targetImage || !selectedColor) {
+  const colorSelectionMask = useMemo(() => {
+    if (!targetImage || !selectedColor || toolMode !== 'color') {
       return null
     }
 
     return createColorSelectionMask(targetImage, selectedColor, tolerance)
-  }, [selectedColor, targetImage, tolerance])
+  }, [selectedColor, targetImage, tolerance, toolMode])
+  const manualSelectionMask =
+    manualSelection?.image === targetImage && isShapeSelectionTool ? manualSelection.mask : null
+  const selectionMask = colorSelectionMask ?? manualSelectionMask
   const selectionCount = useMemo(() => countSelectionPixels(selectionMask), [selectionMask])
 
   useEffect(() => {
@@ -210,7 +231,13 @@ export function ImageComparePanel({
         activeElement instanceof HTMLTextAreaElement ||
         activeElement instanceof HTMLSelectElement
 
-      if (event.key !== 'Delete' || isEditingControl || !selectionMask || selectionCount === 0) {
+      if (
+        event.key !== 'Delete' ||
+        isEditingControl ||
+        toolMode !== 'color' ||
+        !selectionMask ||
+        selectionCount === 0
+      ) {
         return
       }
 
@@ -224,7 +251,7 @@ export function ImageComparePanel({
     return () => {
       window.removeEventListener('keydown', handleKeyDown)
     }
-  }, [onApplyColorCutout, selectionCount, selectionMask])
+  }, [onApplyColorCutout, selectionCount, selectionMask, toolMode])
 
   useEffect(() => {
     const scroller = scrollerRef.current
@@ -263,6 +290,14 @@ export function ImageComparePanel({
     ? `rgb(${selectedColor.r}, ${selectedColor.g}, ${selectedColor.b})`
     : 'No color'
 
+  const clearToolState = () => {
+    setToolMode('none')
+    setSelectedSample(null)
+    setManualSelection(null)
+    setDragStart(null)
+    setLassoPoints([])
+  }
+
   const updateDivider = (clientX: number) => {
     const rect = viewportRef.current?.getBoundingClientRect()
     if (!rect) {
@@ -273,7 +308,7 @@ export function ImageComparePanel({
   }
 
   const selectTargetColor = (clientX: number, clientY: number) => {
-    if (!targetImage || !isCutoutMode) {
+    if (!targetImage || toolMode !== 'color') {
       return
     }
 
@@ -288,12 +323,132 @@ export function ImageComparePanel({
   }
 
   const cutoutSelection = () => {
-    if (!selectionMask || selectionCount === 0) {
+    if (!selectionMask || selectionCount === 0 || toolMode !== 'color') {
       return
     }
 
     onApplyColorCutout?.(selectionMask)
+    clearToolState()
+  }
+
+  const cropSelection = () => {
+    if (!selectionMask || selectionCount === 0 || !isShapeSelectionTool) {
+      return
+    }
+
+    onApplySelectionCrop?.(selectionMask)
+    clearToolState()
+  }
+
+  const getImagePoint = (clientX: number, clientY: number) => {
+    if (!targetImage) {
+      return null
+    }
+
+    const rect = targetCanvasRef.current?.getBoundingClientRect()
+    if (!rect) {
+      return null
+    }
+
+    const rawX = Math.floor(((clientX - rect.left) / rect.width) * targetImage.width)
+    const rawY = Math.floor(((clientY - rect.top) / rect.height) * targetImage.height)
+
+    return {
+      x: clamp(rawX, 0, targetImage.width - 1),
+      y: clamp(rawY, 0, targetImage.height - 1),
+    } satisfies ImagePoint
+  }
+
+  const startShapeSelection = (event: ReactPointerEvent<HTMLCanvasElement>) => {
+    if (!targetImage || !isShapeSelectionTool) {
+      return
+    }
+
+    const point = getImagePoint(event.clientX, event.clientY)
+    if (!point) {
+      return
+    }
+
+    event.preventDefault()
+    event.currentTarget.setPointerCapture(event.pointerId)
+    setDragStart(point)
+    setManualSelection(null)
+
+    if (toolMode === 'rectangle') {
+      setManualSelection({
+        image: targetImage,
+        mask: createRectangleSelectionMask(targetImage.width, targetImage.height, point, point),
+      })
+      return
+    }
+
+    setLassoPoints([point])
+  }
+
+  const continueShapeSelection = (event: ReactPointerEvent<HTMLCanvasElement>) => {
+    if (!targetImage || !dragStart || !isShapeSelectionTool) {
+      return
+    }
+
+    const point = getImagePoint(event.clientX, event.clientY)
+    if (!point) {
+      return
+    }
+
+    if (toolMode === 'rectangle') {
+      setManualSelection({
+        image: targetImage,
+        mask: createRectangleSelectionMask(targetImage.width, targetImage.height, dragStart, point),
+      })
+      return
+    }
+
+    setLassoPoints((currentPoints) => {
+      const previousPoint = currentPoints[currentPoints.length - 1]
+      if (previousPoint?.x === point.x && previousPoint.y === point.y) {
+        return currentPoints
+      }
+
+      const nextPoints = [...currentPoints, point]
+      setManualSelection({
+        image: targetImage,
+        mask: createLassoSelectionMask(targetImage.width, targetImage.height, nextPoints),
+      })
+      return nextPoints
+    })
+  }
+
+  const finishShapeSelection = (event: ReactPointerEvent<HTMLCanvasElement>) => {
+    if (!targetImage || !dragStart || !isShapeSelectionTool) {
+      return
+    }
+
+    const point = getImagePoint(event.clientX, event.clientY)
+    if (toolMode === 'rectangle' && point) {
+      setManualSelection({
+        image: targetImage,
+        mask: createRectangleSelectionMask(targetImage.width, targetImage.height, dragStart, point),
+      })
+    }
+    if (toolMode === 'lasso') {
+      const finalPoints = point ? [...lassoPoints, point] : lassoPoints
+      setManualSelection({
+        image: targetImage,
+        mask: createLassoSelectionMask(targetImage.width, targetImage.height, finalPoints),
+      })
+      setLassoPoints(finalPoints)
+    }
+
+    event.currentTarget.releasePointerCapture(event.pointerId)
+    setDragStart(null)
+  }
+
+  const toggleTool = (nextTool: Exclude<ToolMode, 'none'>) => {
+    setToolMode((currentTool) => (currentTool === nextTool ? 'none' : nextTool))
     setSelectedSample(null)
+    setManualSelection(null)
+    setDragStart(null)
+    setLassoPoints([])
   }
 
   return (
@@ -325,7 +480,10 @@ export function ImageComparePanel({
             disabled={!targetImage || !onDownloadTarget}
             title="Download target"
             type="button"
-            onClick={onDownloadTarget}
+            onClick={() => {
+              clearToolState()
+              onDownloadTarget?.()
+            }}
           >
             <Download size={13} />
           </button>
@@ -334,22 +492,51 @@ export function ImageComparePanel({
             disabled={!resultImage || !onDownloadResult}
             title="Download result"
             type="button"
-            onClick={onDownloadResult}
+            onClick={() => {
+              clearToolState()
+              onDownloadResult?.()
+            }}
           >
             <Download size={13} />
           </button>
           <button
             className={`inline-flex h-6 w-6 items-center justify-center rounded border text-zinc-700 disabled:cursor-not-allowed disabled:opacity-40 ${
-              isCutoutMode
+              toolMode === 'color'
                 ? 'border-cyan-600 bg-cyan-50 text-cyan-800'
                 : 'border-zinc-300 bg-white hover:bg-zinc-100'
             }`}
             disabled={!targetImage || !onApplyColorCutout}
             title="Color selection cutout"
             type="button"
-            onClick={() => setIsCutoutMode((current) => !current)}
+            onClick={() => toggleTool('color')}
           >
             <Pipette size={13} />
+          </button>
+          <button
+            className={`inline-flex h-6 w-6 items-center justify-center rounded border text-zinc-700 disabled:cursor-not-allowed disabled:opacity-40 ${
+              toolMode === 'rectangle'
+                ? 'border-cyan-600 bg-cyan-50 text-cyan-800'
+                : 'border-zinc-300 bg-white hover:bg-zinc-100'
+            }`}
+            disabled={!targetImage || !onApplySelectionCrop}
+            title="Rectangle selection"
+            type="button"
+            onClick={() => toggleTool('rectangle')}
+          >
+            <SquareDashedMousePointer size={13} />
+          </button>
+          <button
+            className={`inline-flex h-6 w-6 items-center justify-center rounded border text-zinc-700 disabled:cursor-not-allowed disabled:opacity-40 ${
+              toolMode === 'lasso'
+                ? 'border-cyan-600 bg-cyan-50 text-cyan-800'
+                : 'border-zinc-300 bg-white hover:bg-zinc-100'
+            }`}
+            disabled={!targetImage || !onApplySelectionCrop}
+            title="Lasso selection"
+            type="button"
+            onClick={() => toggleTool('lasso')}
+          >
+            <LassoSelect size={13} />
           </button>
           {onSetResultAsTarget ? (
             <button
@@ -357,7 +544,10 @@ export function ImageComparePanel({
               disabled={!resultImage}
               title="Set result as target"
               type="button"
-              onClick={onSetResultAsTarget}
+              onClick={() => {
+                clearToolState()
+                onSetResultAsTarget()
+              }}
             >
               <Target size={13} />
             </button>
@@ -366,7 +556,10 @@ export function ImageComparePanel({
             className="inline-flex h-6 w-6 items-center justify-center rounded border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100"
             title="Open image"
             type="button"
-            onClick={() => fileInputRef.current?.click()}
+            onClick={() => {
+              clearToolState()
+              fileInputRef.current?.click()
+            }}
           >
             <ImagePlus size={13} />
           </button>
@@ -375,7 +568,10 @@ export function ImageComparePanel({
               className="inline-flex h-6 w-6 items-center justify-center rounded border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100"
               title="Open 3D capture"
               type="button"
-              onClick={onOpen3dCapture}
+              onClick={() => {
+                clearToolState()
+                onOpen3dCapture()
+              }}
             >
               <Box size={13} />
             </button>
@@ -385,7 +581,10 @@ export function ImageComparePanel({
             disabled={!targetImage || !onExpandTarget}
             title="Expand target"
             type="button"
-            onClick={onExpandTarget}
+            onClick={() => {
+              clearToolState()
+              onExpandTarget?.()
+            }}
           >
             <Maximize2 size={13} />
           </button>
@@ -394,13 +593,16 @@ export function ImageComparePanel({
             disabled={!resultImage || !onExpandResult}
             title="Expand result"
             type="button"
-            onClick={onExpandResult}
+            onClick={() => {
+              clearToolState()
+              onExpandResult?.()
+            }}
           >
             <Maximize2 size={13} />
           </button>
         </div>
       </div>
-      {isCutoutMode ? (
+      {toolMode === 'color' ? (
         <div className="flex min-h-9 flex-wrap items-center gap-2 border-b border-zinc-300 bg-white px-2 py-1.5 text-[11px] text-zinc-600">
           <div className="flex items-center gap-1.5">
             <span className="font-medium text-zinc-800">Color Cutout</span>
@@ -452,6 +654,27 @@ export function ImageComparePanel({
           </button>
         </div>
       ) : null}
+      {isShapeSelectionTool ? (
+        <div className="flex min-h-9 flex-wrap items-center gap-2 border-b border-zinc-300 bg-white px-2 py-1.5 text-[11px] text-zinc-600">
+          <div className="flex items-center gap-1.5">
+            <span className="font-medium text-zinc-800">
+              {toolMode === 'rectangle' ? 'Rectangle Selection' : 'Lasso Selection'}
+            </span>
+            <span>Drag over target</span>
+          </div>
+          <span className="tabular-nums">{selectionCount.toLocaleString()} px</span>
+          <button
+            className="inline-flex h-6 items-center justify-center gap-1 rounded border border-zinc-300 bg-white px-2 font-medium text-zinc-800 hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-40"
+            disabled={!selectionMask || selectionCount === 0 || !onApplySelectionCrop}
+            title="Crop selection into target"
+            type="button"
+            onClick={cropSelection}
+          >
+            <Scissors size={13} />
+            <span>Cut</span>
+          </button>
+        </div>
+      ) : null}
       <div
         ref={scrollerRef}
         className={`relative min-h-0 flex-1 overflow-auto bg-[linear-gradient(45deg,#e4e4e7_25%,transparent_25%),linear-gradient(-45deg,#e4e4e7_25%,transparent_25%),linear-gradient(45deg,transparent_75%,#e4e4e7_75%),linear-gradient(-45deg,transparent_75%,#e4e4e7_75%)] bg-[length:18px_18px] bg-[position:0_0,0_9px,9px_-9px,-9px_0px] p-3 ${
@@ -495,27 +718,36 @@ export function ImageComparePanel({
               <canvas
                 ref={targetCanvasRef}
                 className={`absolute inset-0 block [image-rendering:pixelated] ${
-                  isCutoutMode ? 'cursor-crosshair' : ''
+                  isSelectionTool ? 'cursor-crosshair' : ''
                 }`}
                 style={{
-                  clipPath: resultImage ? `inset(0 ${100 - divider}% 0 0)` : undefined,
+                  clipPath:
+                    resultImage && !isSelectionTool
+                      ? `inset(0 ${100 - divider}% 0 0)`
+                      : undefined,
                   height: displayHeight,
                   width: displayWidth,
                 }}
                 onDoubleClick={onExpandTarget}
                 onPointerDown={(event) => {
-                  if (isCutoutMode) {
+                  if (toolMode === 'color') {
                     event.preventDefault()
                     selectTargetColor(event.clientX, event.clientY)
                   }
+                  if (isShapeSelectionTool) {
+                    startShapeSelection(event)
+                  }
                 }}
+                onPointerMove={continueShapeSelection}
+                onPointerUp={finishShapeSelection}
+                onPointerCancel={finishShapeSelection}
               />
             ) : null}
-            {resultImage ? (
+            {resultImage && !isSelectionTool ? (
               <canvas
                 ref={resultCanvasRef}
                 className={`absolute inset-0 block [image-rendering:pixelated] ${
-                  isCutoutMode ? 'pointer-events-none' : ''
+                  isSelectionTool ? 'pointer-events-none' : ''
                 }`}
                 style={{
                   clipPath: `inset(0 0 0 ${divider}%)`,
@@ -532,11 +764,11 @@ export function ImageComparePanel({
                 style={{ height: displayHeight, width: displayWidth }}
               />
             ) : null}
-            {targetImage && resultImage ? (
+            {targetImage && resultImage && !isSelectionTool ? (
               <button
                 aria-label="Adjust target result comparison"
                 className={`absolute inset-y-0 z-10 w-6 -translate-x-1/2 cursor-ew-resize touch-none ${
-                  isCutoutMode ? 'pointer-events-none' : ''
+                  isSelectionTool ? 'pointer-events-none' : ''
                 }`}
                 style={{ left: `${divider}%` }}
                 type="button"

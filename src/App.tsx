@@ -11,6 +11,7 @@ function App() {
   const {
     activeMethod,
     applyColorCutout,
+    applySelectionCrop,
     applyProcessing,
     currentImage,
     downloadCurrentImage,
@@ -38,13 +39,19 @@ function App() {
   } = usePixelSnapperWorkspace()
   const [isDragging, setIsDragging] = useState(false)
   const [isModelCaptureOpen, setIsModelCaptureOpen] = useState(false)
+  const [comparePanelResetKey, setComparePanelResetKey] = useState(0)
   const dragDepthRef = useRef(0)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const resetComparePanelTools = () => {
+    setComparePanelResetKey((key) => key + 1)
+  }
 
   const handleDrop = (event: DragEvent<HTMLDivElement>) => {
     event.preventDefault()
     dragDepthRef.current = 0
     setIsDragging(false)
+    resetComparePanelTools()
     void handleFiles(event.dataTransfer.files)
   }
 
@@ -62,6 +69,7 @@ function App() {
   }
 
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+    resetComparePanelTools()
     void handleFiles(event.target.files).finally(() => {
       event.target.value = ''
     })
@@ -80,6 +88,7 @@ function App() {
       <section className="grid min-h-0 flex-1 grid-cols-1 border-b border-zinc-300 lg:grid-cols-[minmax(0,1fr)_286px]">
         <div className="h-full min-h-0">
           <ImageComparePanel
+            key={comparePanelResetKey}
             fileInputRef={fileInputRef}
             isDragging={isDragging}
             isLoadingImage={isLoadingImage}
@@ -94,6 +103,7 @@ function App() {
             }}
             onDrop={handleDrop}
             onApplyColorCutout={applyColorCutout}
+            onApplySelectionCrop={applySelectionCrop}
             onDownloadResult={previewImage ? downloadResultImage : undefined}
             onDownloadTarget={currentImage ? downloadTargetImage : undefined}
             onExpandResult={
@@ -106,8 +116,18 @@ function App() {
                 ? () => openExpanded('Target', currentImage.fileName, currentImage.imageData)
                 : undefined
             }
-            onOpen3dCapture={() => setIsModelCaptureOpen(true)}
-            onSetResultAsTarget={previewImage ? setResultAsTarget : undefined}
+            onOpen3dCapture={() => {
+              resetComparePanelTools()
+              setIsModelCaptureOpen(true)
+            }}
+            onSetResultAsTarget={
+              previewImage
+                ? () => {
+                    resetComparePanelTools()
+                    setResultAsTarget()
+                  }
+                : undefined
+            }
           />
         </div>
 
@@ -118,7 +138,10 @@ function App() {
           isProcessing={isProcessing}
           pixelSnapConfig={pixelSnapConfig}
           resizeConfig={resizeConfig}
-          onApply={applyProcessing}
+          onApply={() => {
+            resetComparePanelTools()
+            applyProcessing()
+          }}
           onDownload={downloadCurrentImage}
           onResetConfig={resetActiveConfig}
           onSelectMethod={setActiveMethod}
@@ -131,7 +154,10 @@ function App() {
       <HistoryStrip
         entries={history}
         onOpen={(entry) => openExpanded(entry.label, entry.fileName, entry.imageData)}
-        onSetAsTarget={setHistoryEntryAsTarget}
+        onSetAsTarget={(entry) => {
+          resetComparePanelTools()
+          setHistoryEntryAsTarget(entry)
+        }}
       />
 
       {expandedImage ? (
@@ -146,6 +172,7 @@ function App() {
       {isModelCaptureOpen ? (
         <ModelCaptureDialog
           onCapture={(fileName, imageData) => {
+            resetComparePanelTools()
             setImageAsTarget(fileName, imageData)
             setIsModelCaptureOpen(false)
           }}
