@@ -1,15 +1,15 @@
-import type { PixelSnapperConfig } from './types'
+import type { PixelSnapperConfig } from "./types";
 
 export const defaultPixelSnapperConfig: PixelSnapperConfig = {
-  kColors: 16,
+  kColors: 32,
   kSeed: 42,
   maxKmeansIterations: 15,
-  peakThresholdMultiplier: 0.2,
-  peakDistanceFilter: 4,
-  walkerSearchWindowRatio: 0.35,
-  walkerMinSearchWindow: 2,
-  walkerStrengthThreshold: 0.5,
+  peakThresholdMultiplier: 0.12,
+  peakDistanceFilter: 2,
+  walkerSearchWindowRatio: 0.2,
+  walkerMinSearchWindow: 1,
+  walkerStrengthThreshold: 0.65,
   minCutsPerAxis: 4,
-  fallbackTargetSegments: 64,
-  maxStepRatio: 1.8,
-}
+  fallbackTargetSegments: 128,
+  maxStepRatio: 3,
+};
