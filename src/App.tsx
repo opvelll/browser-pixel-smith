@@ -17,6 +17,7 @@ function App() {
     expandedImage,
     handleFiles,
     history,
+    isLoadingImage,
     isProcessing,
     openExpanded,
     pixelSnapConfig,
@@ -33,12 +34,27 @@ function App() {
   } = usePixelSnapperWorkspace()
   const [isDragging, setIsDragging] = useState(false)
   const [isModelCaptureOpen, setIsModelCaptureOpen] = useState(false)
+  const dragDepthRef = useRef(0)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handleDrop = (event: DragEvent<HTMLDivElement>) => {
     event.preventDefault()
+    dragDepthRef.current = 0
     setIsDragging(false)
     void handleFiles(event.dataTransfer.files)
+  }
+
+  const handleDragEnter = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    dragDepthRef.current += 1
+    setIsDragging(true)
+  }
+
+  const handleDragLeave = () => {
+    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1)
+    if (dragDepthRef.current === 0) {
+      setIsDragging(false)
+    }
   }
 
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -58,19 +74,20 @@ function App() {
       />
 
       <section className="grid min-h-0 flex-1 grid-cols-1 border-b border-zinc-300 lg:grid-cols-[minmax(0,1fr)_286px]">
-        <div className="min-h-0">
+        <div className="h-full min-h-0">
           <ImageComparePanel
             fileInputRef={fileInputRef}
             isDragging={isDragging}
+            isLoadingImage={isLoadingImage}
             isProcessing={isProcessing}
             resultImage={previewImage}
             targetImage={currentImage?.imageData ?? null}
-            onDragEnter={(event) => {
+            onDragEnter={handleDragEnter}
+            onDragLeave={handleDragLeave}
+            onDragOver={(event) => {
               event.preventDefault()
-              setIsDragging(true)
+              event.dataTransfer.dropEffect = 'copy'
             }}
-            onDragLeave={() => setIsDragging(false)}
-            onDragOver={(event) => event.preventDefault()}
             onDrop={handleDrop}
             onExpandResult={
               previewImage && currentImage

@@ -1,4 +1,4 @@
-import { Box, ImagePlus, Maximize2, Target, Zap } from 'lucide-react'
+import { Box, ImagePlus, LoaderCircle, Maximize2, Target, Zap } from 'lucide-react'
 import type { DragEvent, RefObject } from 'react'
 import { useEffect, useRef, useState } from 'react'
 import { drawImageData } from '../lib/imageData'
@@ -13,6 +13,7 @@ function clamp(value: number, min: number, max: number) {
 export function ImageComparePanel({
   fileInputRef,
   isDragging = false,
+  isLoadingImage = false,
   isProcessing = false,
   resultImage,
   targetImage,
@@ -27,6 +28,7 @@ export function ImageComparePanel({
 }: {
   fileInputRef: RefObject<HTMLInputElement | null>
   isDragging?: boolean
+  isLoadingImage?: boolean
   isProcessing?: boolean
   resultImage: ImageData | null
   targetImage: ImageData | null
@@ -82,7 +84,11 @@ export function ImageComparePanel({
   const baseHeight = targetImage?.height ?? resultImage?.height ?? 1
   const displayWidth = Math.max(1, baseWidth * zoom)
   const displayHeight = Math.max(1, baseHeight * zoom)
-  const targetMeta = targetImage ? `${targetImage.width} x ${targetImage.height}` : 'Drop image'
+  const targetMeta = targetImage
+    ? `${targetImage.width} x ${targetImage.height}`
+    : isLoadingImage
+      ? 'Loading'
+      : 'Drop image'
   const resultMeta = resultImage
     ? `${resultImage.width} x ${resultImage.height}`
     : isProcessing
@@ -99,7 +105,15 @@ export function ImageComparePanel({
   }
 
   return (
-    <div className="flex min-h-0 flex-col border-r border-zinc-300 bg-zinc-50">
+    <div
+      aria-busy={isLoadingImage}
+      className="flex h-full min-h-0 flex-col border-r border-zinc-300 bg-zinc-50"
+      data-testid="image-drop-workspace"
+      onDragEnter={onDragEnter}
+      onDragLeave={onDragLeave}
+      onDragOver={onDragOver}
+      onDrop={onDrop}
+    >
       <div className="flex h-8 items-center justify-between border-b border-zinc-300 px-2 text-xs">
         <div className="flex min-w-0 items-center gap-3">
           <div className="flex min-w-0 items-center gap-2">
@@ -165,18 +179,29 @@ export function ImageComparePanel({
       </div>
       <div
         ref={scrollerRef}
-        className={`relative min-h-[240px] flex-1 overflow-auto bg-[linear-gradient(45deg,#e4e4e7_25%,transparent_25%),linear-gradient(-45deg,#e4e4e7_25%,transparent_25%),linear-gradient(45deg,transparent_75%,#e4e4e7_75%),linear-gradient(-45deg,transparent_75%,#e4e4e7_75%)] bg-[length:18px_18px] bg-[position:0_0,0_9px,9px_-9px,-9px_0px] p-3 ${
+        className={`relative min-h-0 flex-1 overflow-auto bg-[linear-gradient(45deg,#e4e4e7_25%,transparent_25%),linear-gradient(-45deg,#e4e4e7_25%,transparent_25%),linear-gradient(45deg,transparent_75%,#e4e4e7_75%),linear-gradient(-45deg,transparent_75%,#e4e4e7_75%)] bg-[length:18px_18px] bg-[position:0_0,0_9px,9px_-9px,-9px_0px] p-3 ${
           isDragging ? 'outline outline-2 outline-cyan-600 outline-offset-[-2px]' : ''
         }`}
-        onDragEnter={onDragEnter}
-        onDragLeave={onDragLeave}
-        onDragOver={onDragOver}
-        onDrop={onDrop}
       >
         {!targetImage && !resultImage ? (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-[11px] text-zinc-500">
-            <ImagePlus size={18} />
-            <span>Drop image</span>
+            {isLoadingImage ? (
+              <>
+                <LoaderCircle className="animate-spin" size={18} />
+                <span>Loading</span>
+              </>
+            ) : (
+              <>
+                <ImagePlus size={18} />
+                <span>Drop image</span>
+              </>
+            )}
+          </div>
+        ) : null}
+        {isLoadingImage && (targetImage || resultImage) ? (
+          <div className="absolute right-4 top-4 z-20 inline-flex items-center gap-2 rounded border border-zinc-300 bg-white px-2 py-1 text-[11px] text-zinc-600 shadow-sm">
+            <LoaderCircle className="animate-spin" size={13} />
+            <span>Loading</span>
           </div>
         ) : null}
         {isProcessing && !resultImage ? (

@@ -28,6 +28,7 @@ export function usePixelSnapperWorkspace() {
     defaultPixelSnapperConfig,
   )
   const [resizeConfig, setResizeConfig] = useState<ResizeConfig>(defaultResizeConfig)
+  const [isLoadingImage, setIsLoadingImage] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [expandedImage, setExpandedImage] = useState<ExpandedImage | null>(null)
@@ -52,6 +53,7 @@ export function usePixelSnapperWorkspace() {
 
     setError(null)
     setPreviewImage(null)
+    setIsLoadingImage(true)
 
     try {
       const imageData = await fileToImageData(file)
@@ -64,6 +66,8 @@ export function usePixelSnapperWorkspace() {
       setCurrentImage(null)
       setHistory([])
       setError(errorMessage(loadError))
+    } finally {
+      setIsLoadingImage(false)
     }
   }
 
@@ -174,6 +178,7 @@ export function usePixelSnapperWorkspace() {
     expandedImage,
     handleFiles,
     history,
+    isLoadingImage,
     isProcessing,
     openExpanded,
     pixelSnapConfig,
