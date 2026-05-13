@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import { PIXEL_SNAPPER_CONTROL_FIELDS } from '../config/pixelSnapperControls'
 import { RESIZE_SCALE_FIELD } from '../config/resizeControls'
+import { applySelectionCutout } from '../lib/colorCutout'
 import { errorMessage } from '../lib/errors'
 import { cloneImageData, fileToImageData, imageDataToBlob } from '../lib/imageData'
 import { clamp } from '../lib/number'
@@ -145,24 +146,70 @@ export function usePixelSnapperWorkspace() {
     setError(null)
   }
 
-  const downloadCurrentImage = () => {
-    if (!currentImage) {
-      return
-    }
+  const setHistoryEntryAsTarget = (entry: HistoryEntry) => {
+    setCurrentImage({
+      fileName: entry.fileName,
+      imageData: cloneImageData(entry.imageData),
+    })
+    setPreviewImage(null)
+    setError(null)
+  }
 
-    imageDataToBlob(currentImage.imageData, (blob) => {
+  const downloadImageData = (fileName: string, imageData: ImageData, suffix: string) => {
+    imageDataToBlob(imageData, (blob) => {
       if (!blob) {
         setError('Failed to create PNG download')
         return
       }
       const url = URL.createObjectURL(blob)
       const link = document.createElement('a')
-      const baseName = currentImage.fileName.replace(/\.[^.]+$/, '') || 'pixel-snapped'
+      const baseName = fileName.replace(/\.[^.]+$/, '') || 'pixel-snapped'
       link.href = url
-      link.download = `${baseName}-current.png`
+      link.download = `${baseName}-${suffix}.png`
       link.click()
       URL.revokeObjectURL(url)
     })
+  }
+
+  const downloadCurrentImage = () => {
+    if (!currentImage) {
+      return
+    }
+
+    downloadImageData(currentImage.fileName, currentImage.imageData, 'current')
+  }
+
+  const downloadTargetImage = () => {
+    if (!currentImage) {
+      return
+    }
+
+    downloadImageData(currentImage.fileName, currentImage.imageData, 'target')
+  }
+
+  const downloadResultImage = () => {
+    if (!currentImage || !previewImage) {
+      return
+    }
+
+    downloadImageData(currentImage.fileName, previewImage, 'result')
+  }
+
+  const applyColorCutout = (selectionMask: Uint8Array) => {
+    if (!currentImage || isProcessing) {
+      return
+    }
+
+    try {
+      const cutoutImage = applySelectionCutout(currentImage.imageData, selectionMask)
+      const nextLabel = `Color Cutout #${history.length}`
+      setCurrentImage({ ...currentImage, imageData: cutoutImage })
+      setPreviewImage(null)
+      setError(null)
+      pushHistory(nextLabel, currentImage.fileName, cutoutImage)
+    } catch (cutoutError) {
+      setError(errorMessage(cutoutError))
+    }
   }
 
   const openExpanded = (label: string, fileName: string, imageData: ImageData) => {
@@ -173,7 +220,10 @@ export function usePixelSnapperWorkspace() {
     activeMethod,
     applyProcessing,
     currentImage,
+    applyColorCutout,
     downloadCurrentImage,
+    downloadResultImage,
+    downloadTargetImage,
     error,
     expandedImage,
     handleFiles,
@@ -187,6 +237,7 @@ export function usePixelSnapperWorkspace() {
     resizeConfig,
     setExpandedImage,
     setActiveMethod,
+    setHistoryEntryAsTarget,
     setImageAsTarget,
     setResultAsTarget,
     updateResizeAlgorithm,

@@ -10,9 +10,12 @@ import { usePixelSnapperWorkspace } from './hooks/usePixelSnapperWorkspace'
 function App() {
   const {
     activeMethod,
+    applyColorCutout,
     applyProcessing,
     currentImage,
     downloadCurrentImage,
+    downloadResultImage,
+    downloadTargetImage,
     error,
     expandedImage,
     handleFiles,
@@ -26,6 +29,7 @@ function App() {
     resizeConfig,
     setExpandedImage,
     setActiveMethod,
+    setHistoryEntryAsTarget,
     setImageAsTarget,
     setResultAsTarget,
     updateResizeAlgorithm,
@@ -89,6 +93,9 @@ function App() {
               event.dataTransfer.dropEffect = 'copy'
             }}
             onDrop={handleDrop}
+            onApplyColorCutout={applyColorCutout}
+            onDownloadResult={previewImage ? downloadResultImage : undefined}
+            onDownloadTarget={currentImage ? downloadTargetImage : undefined}
             onExpandResult={
               previewImage && currentImage
                 ? () => openExpanded('Result', currentImage.fileName, previewImage)
@@ -124,6 +131,7 @@ function App() {
       <HistoryStrip
         entries={history}
         onOpen={(entry) => openExpanded(entry.label, entry.fileName, entry.imageData)}
+        onSetAsTarget={setHistoryEntryAsTarget}
       />
 
       {expandedImage ? (
