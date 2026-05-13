@@ -32,10 +32,18 @@ export function createColorSelectionMask(
   tolerance: number,
 ) {
   const mask = new Uint8Array(imageData.width * imageData.height)
+  if (selectedColor.a === 0) {
+    return mask
+  }
+
   const safeTolerance = Math.max(0, tolerance)
 
   for (let index = 0; index < mask.length; index += 1) {
     const offset = index * 4
+    if (imageData.data[offset + 3] === 0) {
+      continue
+    }
+
     const candidate = {
       r: imageData.data[offset],
       g: imageData.data[offset + 1],
@@ -77,7 +85,11 @@ export function applySelectionCutout(imageData: ImageData, mask: Uint8Array) {
 
   for (let index = 0; index < mask.length; index += 1) {
     if (mask[index]) {
-      nextImageData.data[index * 4 + 3] = 0
+      const offset = index * 4
+      nextImageData.data[offset] = 0
+      nextImageData.data[offset + 1] = 0
+      nextImageData.data[offset + 2] = 0
+      nextImageData.data[offset + 3] = 0
     }
   }
 
