@@ -1,12 +1,11 @@
 import type { ChangeEvent, DragEvent } from 'react'
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { ExpandedImageDialog } from './components/ExpandedImageDialog'
 import { HistoryStrip } from './components/HistoryStrip'
-import { ImageWorkspacePanel } from './components/ImageWorkspacePanel'
+import { ImageComparePanel } from './components/ImageComparePanel'
 import { ModelCaptureDialog } from './components/ModelCaptureDialog'
 import { ProcessSidebar } from './components/ProcessSidebar'
 import { usePixelSnapperWorkspace } from './hooks/usePixelSnapperWorkspace'
-import { drawImageData } from './lib/imageData'
 
 function App() {
   const {
@@ -34,21 +33,7 @@ function App() {
   } = usePixelSnapperWorkspace()
   const [isDragging, setIsDragging] = useState(false)
   const [isModelCaptureOpen, setIsModelCaptureOpen] = useState(false)
-  const currentCanvasRef = useRef<HTMLCanvasElement>(null)
-  const previewCanvasRef = useRef<HTMLCanvasElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
-
-  useEffect(() => {
-    if (currentImage) {
-      drawImageData(currentCanvasRef.current, currentImage.imageData)
-    }
-  }, [currentImage])
-
-  useEffect(() => {
-    if (previewImage) {
-      drawImageData(previewCanvasRef.current, previewImage)
-    }
-  }, [previewImage])
 
   const handleDrop = (event: DragEvent<HTMLDivElement>) => {
     event.preventDefault()
@@ -73,14 +58,13 @@ function App() {
       />
 
       <section className="grid min-h-0 flex-1 grid-cols-1 border-b border-zinc-300 lg:grid-cols-[minmax(0,1fr)_286px]">
-        <div className="grid min-h-0 grid-cols-1 border-r border-zinc-300 md:grid-cols-2">
-          <ImageWorkspacePanel
-            canvasRef={currentCanvasRef}
+        <div className="min-h-0">
+          <ImageComparePanel
             fileInputRef={fileInputRef}
-            image={currentImage?.imageData ?? null}
             isDragging={isDragging}
-            label="Target"
-            meta={currentImage ? `${currentImage.imageData.width} x ${currentImage.imageData.height}` : 'Drop image'}
+            isProcessing={isProcessing}
+            resultImage={previewImage}
+            targetImage={currentImage?.imageData ?? null}
             onDragEnter={(event) => {
               event.preventDefault()
               setIsDragging(true)
@@ -88,31 +72,18 @@ function App() {
             onDragLeave={() => setIsDragging(false)}
             onDragOver={(event) => event.preventDefault()}
             onDrop={handleDrop}
-            onExpand={
+            onExpandResult={
+              previewImage && currentImage
+                ? () => openExpanded('Result', currentImage.fileName, previewImage)
+                : undefined
+            }
+            onExpandTarget={
               currentImage
                 ? () => openExpanded('Target', currentImage.fileName, currentImage.imageData)
                 : undefined
             }
             onOpen3dCapture={() => setIsModelCaptureOpen(true)}
-          />
-          <ImageWorkspacePanel
-            canvasRef={previewCanvasRef}
-            image={previewImage}
-            isProcessing={isProcessing}
-            label="Result"
-            meta={
-              previewImage
-                ? `${previewImage.width} x ${previewImage.height}`
-                : isProcessing
-                  ? 'Processing'
-                  : 'Waiting'
-            }
-            onExpand={
-              previewImage && currentImage
-                ? () => openExpanded('Result', currentImage.fileName, previewImage)
-                : undefined
-            }
-            onSetAsTarget={previewImage ? setResultAsTarget : undefined}
+            onSetResultAsTarget={previewImage ? setResultAsTarget : undefined}
           />
         </div>
 
