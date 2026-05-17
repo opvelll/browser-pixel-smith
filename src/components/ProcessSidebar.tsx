@@ -1,8 +1,9 @@
-import { Download, Expand, Grid3X3, RotateCcw, SlidersHorizontal, Zap } from 'lucide-react'
+import { Download, Expand, Grid3X3, Palette, RotateCcw, SlidersHorizontal, Zap } from 'lucide-react'
 import { PIXEL_SNAPPER_CONTROL_FIELDS } from '../config/pixelSnapperControls'
+import { QUANTIZE_CONTROL_FIELDS, QUANTIZE_METHOD_OPTIONS } from '../config/quantizeControls'
 import { RESIZE_SCALE_FIELD } from '../config/resizeControls'
 import type { ProcessingMethod } from '../hooks/usePixelSnapperWorkspace'
-import type { PixelSnapperConfig } from '../pixelSnapper'
+import type { PixelSnapperConfig, QuantizeConfig, QuantizeMethod } from '../pixelSnapper'
 import type { ResizeAlgorithm, ResizeConfig } from '../resize'
 import { ParameterRow } from './ParameterRow'
 
@@ -12,6 +13,7 @@ export function ProcessSidebar({
   hasImage,
   isProcessing,
   pixelSnapConfig,
+  quantizeConfig,
   resizeConfig,
   onApply,
   onDownload,
@@ -19,6 +21,8 @@ export function ProcessSidebar({
   onSelectMethod,
   onUpdateResizeAlgorithm,
   onUpdateResizeScale,
+  onUpdateQuantizeConfig,
+  onUpdateQuantizeMethod,
   onUpdateConfig,
 }: {
   activeMethod: ProcessingMethod
@@ -26,6 +30,7 @@ export function ProcessSidebar({
   hasImage: boolean
   isProcessing: boolean
   pixelSnapConfig: PixelSnapperConfig
+  quantizeConfig: QuantizeConfig
   resizeConfig: ResizeConfig
   onApply: () => void
   onDownload: () => void
@@ -33,10 +38,20 @@ export function ProcessSidebar({
   onSelectMethod: (method: ProcessingMethod) => void
   onUpdateResizeAlgorithm: (algorithm: ResizeAlgorithm) => void
   onUpdateResizeScale: (value: number) => void
+  onUpdateQuantizeConfig: (
+    key: Extract<keyof QuantizeConfig, 'colors' | 'seed' | 'refineIterations'>,
+    value: number,
+  ) => void
+  onUpdateQuantizeMethod: (method: QuantizeMethod) => void
   onUpdateConfig: (key: keyof PixelSnapperConfig, value: number) => void
 }) {
   const [primaryField, ...secondaryFields] = PIXEL_SNAPPER_CONTROL_FIELDS
-  const activeLabel = activeMethod === 'pixelSnap' ? 'Pixel Snap' : 'Resize'
+  const [quantizePrimaryField, ...quantizeSecondaryFields] = QUANTIZE_CONTROL_FIELDS
+  const activeLabel =
+    activeMethod === 'pixelSnap' ? 'Pixel Snap' : activeMethod === 'quantize' ? 'Quantize' : 'Resize'
+  const activeQuantizeMethod = QUANTIZE_METHOD_OPTIONS.find(
+    (option) => option.method === quantizeConfig.method,
+  )
 
   const tabClassName = (method: ProcessingMethod) =>
     `flex h-8 min-w-0 flex-1 items-center justify-center gap-1.5 border-b-2 px-2 text-[11px] font-medium ${
@@ -84,6 +99,15 @@ export function ProcessSidebar({
           <Expand size={13} />
           <span className="truncate">Resize</span>
         </button>
+        <button
+          className={tabClassName('quantize')}
+          disabled={isProcessing}
+          type="button"
+          onClick={() => onSelectMethod('quantize')}
+        >
+          <Palette size={13} />
+          <span className="truncate">Quant</span>
+        </button>
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
@@ -121,6 +145,64 @@ export function ProcessSidebar({
               ))}
             </div>
           </>
+        ) : activeMethod === 'quantize' ? (
+          <div className="divide-y divide-zinc-200">
+            <div className="border-b border-zinc-300 px-2 py-2">
+              <div className="mb-2 truncate rounded-sm border border-zinc-300 bg-white px-2 py-1.5 text-[11px] font-medium text-zinc-700">
+                {quantizeConfig.colors} colors / {activeQuantizeMethod?.label ?? 'Quantize'}
+              </div>
+              <ParameterRow
+                field={quantizePrimaryField}
+                isPrimary
+                value={quantizeConfig.colors}
+                onChange={(value) => onUpdateQuantizeConfig('colors', value)}
+              />
+            </div>
+            <div className="px-2 py-2">
+              <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-medium text-zinc-600">
+                <Palette size={13} />
+                Method
+              </div>
+              <div className="grid grid-cols-1 overflow-hidden rounded-sm border border-zinc-300 bg-white">
+                {QUANTIZE_METHOD_OPTIONS.map((option) => (
+                  <button
+                    key={option.method}
+                    className={`flex h-8 items-center justify-between border-b border-zinc-200 px-2 text-left text-[11px] font-medium last:border-b-0 ${
+                      quantizeConfig.method === option.method
+                        ? 'bg-zinc-950 text-white'
+                        : 'text-zinc-700 hover:bg-zinc-100'
+                    }`}
+                    type="button"
+                    onClick={() => onUpdateQuantizeMethod(option.method)}
+                  >
+                    <span className="truncate">{option.label}</span>
+                    <span
+                      className={`ml-2 shrink-0 text-[10px] ${
+                        quantizeConfig.method === option.method ? 'text-zinc-300' : 'text-zinc-500'
+                      }`}
+                    >
+                      {option.hint}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="divide-y divide-zinc-200">
+              {quantizeSecondaryFields.map((field) => (
+                <ParameterRow
+                  key={field.key}
+                  field={field}
+                  value={quantizeConfig[field.key]}
+                  onChange={(value) => onUpdateQuantizeConfig(field.key, value)}
+                />
+              ))}
+            </div>
+            {quantizeConfig.method === 'octreeFast' ? (
+              <div className="px-4 py-2 text-[11px] leading-4 text-zinc-500">
+                Seed and refine iter are unused by fast mode.
+              </div>
+            ) : null}
+          </div>
         ) : (
           <div className="divide-y divide-zinc-200">
             <div className="px-2 py-2">

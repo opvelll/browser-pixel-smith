@@ -1,4 +1,4 @@
-import type { PixelSnapperConfig } from "./types";
+import type { PixelSnapperConfig, QuantizeConfig } from './types'
 
 export const defaultPixelSnapperConfig: PixelSnapperConfig = {
   kColors: 32,
@@ -12,4 +12,11 @@ export const defaultPixelSnapperConfig: PixelSnapperConfig = {
   minCutsPerAxis: 4,
   fallbackTargetSegments: 128,
   maxStepRatio: 3,
-};
+}
+
+export const defaultQuantizeConfig: QuantizeConfig = {
+  colors: 32,
+  method: 'oklabRefine',
+  seed: 42,
+  refineIterations: 8,
+}

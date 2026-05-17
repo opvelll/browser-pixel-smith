@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
 import { PIXEL_SNAPPER_CONTROL_FIELDS } from '../config/pixelSnapperControls'
+import { QUANTIZE_CONTROL_FIELDS } from '../config/quantizeControls'
 import { RESIZE_SCALE_FIELD } from '../config/resizeControls'
 import { applySelectionCutout } from '../lib/colorCutout'
 import { errorMessage } from '../lib/errors'
@@ -8,8 +9,12 @@ import { clamp } from '../lib/number'
 import { cropSelectionToImage } from '../lib/selectionCrop'
 import {
   defaultPixelSnapperConfig,
+  defaultQuantizeConfig,
   type PixelSnapperConfig,
+  processQuantize,
   processPixelSnap,
+  type QuantizeConfig,
+  type QuantizeMethod,
 } from '../pixelSnapper'
 import {
   defaultResizeConfig,
@@ -19,7 +24,7 @@ import {
 } from '../resize'
 import type { ExpandedImage, HistoryEntry, LoadedImage } from '../types/images'
 
-export type ProcessingMethod = 'pixelSnap' | 'resize'
+export type ProcessingMethod = 'pixelSnap' | 'resize' | 'quantize'
 
 export function usePixelSnapperWorkspace() {
   const [currentImage, setCurrentImage] = useState<LoadedImage | null>(null)
@@ -29,6 +34,7 @@ export function usePixelSnapperWorkspace() {
   const [pixelSnapConfig, setPixelSnapConfig] = useState<PixelSnapperConfig>(
     defaultPixelSnapperConfig,
   )
+  const [quantizeConfig, setQuantizeConfig] = useState<QuantizeConfig>(defaultQuantizeConfig)
   const [resizeConfig, setResizeConfig] = useState<ResizeConfig>(defaultResizeConfig)
   const [isLoadingImage, setIsLoadingImage] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
@@ -102,9 +108,28 @@ export function usePixelSnapperWorkspace() {
     setResizeConfig((nextConfig) => ({ ...nextConfig, algorithm }))
   }
 
+  const updateQuantizeConfig = (
+    key: Extract<keyof QuantizeConfig, 'colors' | 'seed' | 'refineIterations'>,
+    rawValue: number,
+  ) => {
+    const field = QUANTIZE_CONTROL_FIELDS.find((candidate) => candidate.key === key)
+    const min = field?.min ?? Number.NEGATIVE_INFINITY
+    const max = field?.max ?? Number.POSITIVE_INFINITY
+    const value = Number.isFinite(rawValue) ? clamp(rawValue, min, max) : min
+    setQuantizeConfig((nextConfig) => ({ ...nextConfig, [key]: value }))
+  }
+
+  const updateQuantizeMethod = (method: QuantizeMethod) => {
+    setQuantizeConfig((nextConfig) => ({ ...nextConfig, method }))
+  }
+
   const resetActiveConfig = () => {
     if (activeMethod === 'pixelSnap') {
       setPixelSnapConfig(defaultPixelSnapperConfig)
+      return
+    }
+    if (activeMethod === 'quantize') {
+      setQuantizeConfig(defaultQuantizeConfig)
       return
     }
     setResizeConfig(defaultResizeConfig)
@@ -123,8 +148,11 @@ export function usePixelSnapperWorkspace() {
         const processed =
           activeMethod === 'pixelSnap'
             ? processPixelSnap(currentImage.imageData, pixelSnapConfig)
-            : processResize(currentImage.imageData, resizeConfig)
-        const methodLabel = activeMethod === 'pixelSnap' ? 'Pixel Snap' : 'Resize'
+            : activeMethod === 'quantize'
+              ? processQuantize(currentImage.imageData, quantizeConfig)
+              : processResize(currentImage.imageData, resizeConfig)
+        const methodLabel =
+          activeMethod === 'pixelSnap' ? 'Pixel Snap' : activeMethod === 'quantize' ? 'Quantize' : 'Resize'
         const nextLabel = `${methodLabel} #${history.length}`
         setPreviewImage(processed)
         pushHistory(nextLabel, currentImage.fileName, processed)
@@ -251,6 +279,7 @@ export function usePixelSnapperWorkspace() {
     isProcessing,
     openExpanded,
     pixelSnapConfig,
+    quantizeConfig,
     previewImage,
     resetActiveConfig,
     resizeConfig,
@@ -261,6 +290,8 @@ export function usePixelSnapperWorkspace() {
     setResultAsTarget,
     updateResizeAlgorithm,
     updateResizeScale,
+    updateQuantizeConfig,
+    updateQuantizeMethod,
     updateConfig,
   }
 }

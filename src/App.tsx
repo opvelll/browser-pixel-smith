@@ -26,6 +26,7 @@ function App() {
     openExpanded,
     pixelSnapConfig,
     previewImage,
+    quantizeConfig,
     resetActiveConfig,
     resizeConfig,
     setExpandedImage,
@@ -35,6 +36,8 @@ function App() {
     setResultAsTarget,
     updateResizeAlgorithm,
     updateResizeScale,
+    updateQuantizeConfig,
+    updateQuantizeMethod,
     updateConfig,
   } = usePixelSnapperWorkspace()
   const [isDragging, setIsDragging] = useState(false)
@@ -137,6 +140,7 @@ function App() {
           hasImage={Boolean(currentImage)}
           isProcessing={isProcessing}
           pixelSnapConfig={pixelSnapConfig}
+          quantizeConfig={quantizeConfig}
           resizeConfig={resizeConfig}
           onApply={() => {
             resetComparePanelTools()
@@ -147,6 +151,8 @@ function App() {
           onSelectMethod={setActiveMethod}
           onUpdateResizeAlgorithm={updateResizeAlgorithm}
           onUpdateResizeScale={updateResizeScale}
+          onUpdateQuantizeConfig={updateQuantizeConfig}
+          onUpdateQuantizeMethod={updateQuantizeMethod}
           onUpdateConfig={updateConfig}
         />
       </section>
