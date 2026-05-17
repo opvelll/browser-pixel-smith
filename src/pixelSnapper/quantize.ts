@@ -131,12 +131,12 @@ export function processQuantize(
     config.method === 'medianCut'
       ? medianCutPalette(colors, k)
       : config.method === 'octreeFast'
-        ? octreeFastPalette(source, k)
+        ? octreeFastPalette(colors, k)
         : refinePalette(
             colors,
             config.method === 'oklabRefine'
               ? seededPalette(colors, k, config.seed, 'oklab')
-              : octreeFastPalette(source, k),
+              : octreeFastPalette(colors, k),
             config.refineIterations,
             config.method === 'oklabRefine' ? 'oklab' : 'rgb',
           )
@@ -288,8 +288,16 @@ function createColorBox(colors: WeightedColor[]): ColorBox {
   }
 }
 
-function octreeFastPalette(img: RgbaImageData, k: number): Rgb[] {
-  const buckets = bucketColors(img).sort((a, b) => b.count - a.count)
+function octreeFastPalette(colors: WeightedColor[], k: number): Rgb[] {
+  let buckets = octreeBucketsFromColors(colors, OCTREE_BUCKET_BITS)
+  for (let bits = OCTREE_BUCKET_BITS + 1; bits <= 8 && buckets.length < k; bits += 1) {
+    buckets = octreeBucketsFromColors(colors, bits)
+  }
+  buckets.sort((a, b) => b.count - a.count)
+  if (buckets.length <= k) {
+    return buckets.map((bucket) => bucket.rgb)
+  }
+
   const palette = buckets.slice(0, k).map((bucket) => ({ rgb: [...bucket.rgb] as Rgb, count: bucket.count }))
 
   for (const bucket of buckets.slice(k)) {
@@ -313,6 +321,39 @@ function octreeFastPalette(img: RgbaImageData, k: number): Rgb[] {
   }
 
   return palette.map((entry) => entry.rgb)
+}
+
+function octreeBucketsFromColors(colors: WeightedColor[], bits: number): WeightedColor[] {
+  const buckets = new Map<number, { sums: Rgb; count: number }>()
+  const shift = 8 - bits
+
+  for (const color of colors) {
+    const r = clampByte(color.rgb[0])
+    const g = clampByte(color.rgb[1])
+    const b = clampByte(color.rgb[2])
+    const key = ((r >> shift) << (bits * 2)) | ((g >> shift) << bits) | (b >> shift)
+    const bucket = buckets.get(key)
+    if (bucket) {
+      bucket.sums[0] += color.rgb[0] * color.count
+      bucket.sums[1] += color.rgb[1] * color.count
+      bucket.sums[2] += color.rgb[2] * color.count
+      bucket.count += color.count
+    } else {
+      buckets.set(key, {
+        sums: [
+          color.rgb[0] * color.count,
+          color.rgb[1] * color.count,
+          color.rgb[2] * color.count,
+        ],
+        count: color.count,
+      })
+    }
+  }
+
+  return Array.from(buckets.values(), ({ sums, count }) => ({
+    rgb: [sums[0] / count, sums[1] / count, sums[2] / count],
+    count,
+  }))
 }
 
 function seededPalette(
