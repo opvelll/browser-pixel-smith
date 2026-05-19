@@ -32,13 +32,28 @@ const MAX_ZOOM = 16
 const MIN_TOLERANCE = 0
 const MAX_TOLERANCE = 441
 type ToolMode = 'none' | 'color' | 'rectangle' | 'lasso'
+type SelectionBoundarySide = 'top' | 'right' | 'bottom' | 'left'
+type SelectionBoundaryEdge = {
+  side: SelectionBoundarySide
+  x: number
+  y: number
+}
+type SelectionOverlayCache = {
+  boundaryEdges: SelectionBoundaryEdge[]
+  maskCanvas: HTMLCanvasElement
+  width: number
+  height: number
+}
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value))
 }
 
-function appendSelectionOutlinePath(context: CanvasRenderingContext2D, mask: Uint8Array, width: number) {
-  const height = mask.length / width
+function createSelectionBoundaryEdges(mask: Uint8Array, width: number, height: number) {
+  const boundaryEdges: SelectionBoundaryEdge[] = []
+  if (mask.length !== width * height) {
+    return boundaryEdges
+  }
 
   for (let index = 0; index < mask.length; index += 1) {
     if (!mask[index]) {
@@ -53,60 +68,137 @@ function appendSelectionOutlinePath(context: CanvasRenderingContext2D, mask: Uin
     const left = x === 0 || !mask[index - 1]
 
     if (top) {
-      context.moveTo(x, y)
-      context.lineTo(x + 1, y)
+      boundaryEdges.push({ side: 'top', x, y })
     }
     if (right) {
-      context.moveTo(x + 1, y)
-      context.lineTo(x + 1, y + 1)
+      boundaryEdges.push({ side: 'right', x, y })
     }
     if (bottom) {
-      context.moveTo(x + 1, y + 1)
-      context.lineTo(x, y + 1)
+      boundaryEdges.push({ side: 'bottom', x, y })
     }
     if (left) {
-      context.moveTo(x, y + 1)
-      context.lineTo(x, y)
+      boundaryEdges.push({ side: 'left', x, y })
     }
   }
+
+  return boundaryEdges
 }
 
-function drawSelectionOutline(
-  canvas: HTMLCanvasElement | null,
+function createSelectionOverlayCache(
   mask: Uint8Array | null,
   width: number,
   height: number,
+): SelectionOverlayCache | null {
+  if (!mask || mask.length !== width * height) {
+    return null
+  }
+
+  const boundaryEdges = createSelectionBoundaryEdges(mask, width, height)
+
+  const maskCanvas = document.createElement('canvas')
+  maskCanvas.width = width
+  maskCanvas.height = height
+  const context = maskCanvas.getContext('2d')
+  if (!context) {
+    return null
+  }
+
+  const overlay = context.createImageData(width, height)
+  for (let index = 0; index < mask.length; index += 1) {
+    if (!mask[index]) {
+      continue
+    }
+
+    const offset = index * 4
+    overlay.data[offset] = 14
+    overlay.data[offset + 1] = 165
+    overlay.data[offset + 2] = 233
+    overlay.data[offset + 3] = 42
+  }
+  context.putImageData(overlay, 0, 0)
+
+  return { boundaryEdges, maskCanvas, width, height }
+}
+
+function appendBoundaryEdge(context: CanvasRenderingContext2D, edge: SelectionBoundaryEdge) {
+  if (edge.side === 'top') {
+    context.moveTo(edge.x, edge.y)
+    context.lineTo(edge.x + 1, edge.y)
+    return
+  }
+  if (edge.side === 'right') {
+    context.moveTo(edge.x + 1, edge.y)
+    context.lineTo(edge.x + 1, edge.y + 1)
+    return
+  }
+  if (edge.side === 'bottom') {
+    context.moveTo(edge.x + 1, edge.y + 1)
+    context.lineTo(edge.x, edge.y + 1)
+    return
+  }
+
+  context.moveTo(edge.x, edge.y + 1)
+  context.lineTo(edge.x, edge.y)
+}
+
+function getBoundaryEdgeMarchPosition(edge: SelectionBoundaryEdge) {
+  return edge.side === 'top' || edge.side === 'bottom' ? edge.x : edge.y
+}
+
+function drawSelectionOverlay(
+  canvas: HTMLCanvasElement | null,
+  cache: SelectionOverlayCache | null,
   dashOffset: number,
+  renderScale = 1,
 ) {
   if (!canvas) {
     return
   }
 
-  canvas.width = width
-  canvas.height = height
+  const width = cache ? Math.max(1, Math.round(cache.width * renderScale)) : 1
+  const height = cache ? Math.max(1, Math.round(cache.height * renderScale)) : 1
+  if (canvas.width !== width || canvas.height !== height) {
+    canvas.width = width
+    canvas.height = height
+  }
   const context = canvas.getContext('2d')
   if (!context) {
     return
   }
 
+  context.setTransform(1, 0, 0, 1, 0, 0)
   context.clearRect(0, 0, width, height)
-  if (!mask) {
+  if (!cache) {
     return
   }
 
-  context.lineWidth = 1
-  context.lineCap = 'square'
+  const scaleX = width / cache.width
+  const scaleY = height / cache.height
+
+  context.imageSmoothingEnabled = false
+  context.drawImage(cache.maskCanvas, 0, 0, width, height)
+  context.setTransform(scaleX, 0, 0, scaleY, 0, 0)
+  context.lineWidth = 1 / Math.max(scaleX, scaleY)
+  context.lineCap = 'butt'
+  context.lineJoin = 'miter'
+
   context.setLineDash([])
 
   context.beginPath()
-  appendSelectionOutlinePath(context, mask, width)
+  for (const edge of cache.boundaryEdges) {
+    if (Math.floor((getBoundaryEdgeMarchPosition(edge) + dashOffset) / 4) % 2 === 0) {
+      appendBoundaryEdge(context, edge)
+    }
+  }
   context.strokeStyle = 'rgba(24,24,27,0.95)'
   context.stroke()
 
   context.beginPath()
-  appendSelectionOutlinePath(context, mask, width)
-  context.setLineDash([4, 4])
-  context.lineDashOffset = -dashOffset
+  for (const edge of cache.boundaryEdges) {
+    if (Math.floor((getBoundaryEdgeMarchPosition(edge) + dashOffset) / 4) % 2 !== 0) {
+      appendBoundaryEdge(context, edge)
+    }
+  }
   context.strokeStyle = 'rgba(255,255,255,0.95)'
   context.stroke()
 }
@@ -187,6 +279,13 @@ export function ImageComparePanel({
     manualSelection?.image === targetImage && isShapeSelectionTool ? manualSelection.mask : null
   const selectionMask = colorSelectionMask ?? manualSelectionMask
   const selectionCount = useMemo(() => countSelectionPixels(selectionMask), [selectionMask])
+  const selectionOverlayCache = useMemo(() => {
+    if (!targetImage || selectionCount === 0) {
+      return null
+    }
+
+    return createSelectionOverlayCache(selectionMask, targetImage.width, targetImage.height)
+  }, [selectionCount, selectionMask, targetImage])
 
   useEffect(() => {
     if (targetImage) {
@@ -201,20 +300,19 @@ export function ImageComparePanel({
   }, [resultImage])
 
   useEffect(() => {
-    if (!targetImage || selectionCount === 0) {
-      drawSelectionOutline(selectionCanvasRef.current, null, 1, 1, 0)
+    if (!selectionOverlayCache) {
+      drawSelectionOverlay(selectionCanvasRef.current, null, 0)
       return
     }
 
     let frameId = 0
     const startedAt = performance.now()
     const animate = (time: number) => {
-      drawSelectionOutline(
+      drawSelectionOverlay(
         selectionCanvasRef.current,
-        selectionMask,
-        targetImage.width,
-        targetImage.height,
+        selectionOverlayCache,
         ((time - startedAt) / 120) % 8,
+        zoom,
       )
       frameId = requestAnimationFrame(animate)
     }
@@ -224,7 +322,7 @@ export function ImageComparePanel({
     return () => {
       cancelAnimationFrame(frameId)
     }
-  }, [selectionCount, selectionMask, targetImage])
+  }, [selectionOverlayCache, zoom])
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
