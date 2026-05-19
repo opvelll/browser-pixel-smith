@@ -12,6 +12,10 @@
 - 処理履歴からの再適用
 - PNG 書き出し
 
+## Published App
+
+https://opvelll.github.io/browser-pixel-smith/
+
 ## Development
 
 ```bash
@@ -26,3 +30,7 @@ pnpm dev
 ```bash
 pnpm build
 ```
+
+## Deployment
+
+`master` ブランチに push すると GitHub Actions が `pnpm build` を実行し、`dist` を GitHub Pages に公開します。
