@@ -27,6 +27,7 @@ function App() {
     pixelSnapConfig,
     previewImage,
     quantizeConfig,
+    resultPalette,
     resetActiveConfig,
     resizeConfig,
     setExpandedImage,
@@ -97,6 +98,7 @@ function App() {
             isLoadingImage={isLoadingImage}
             isProcessing={isProcessing}
             resultImage={previewImage}
+            resultPalette={resultPalette}
             targetImage={currentImage?.imageData ?? null}
             onDragEnter={handleDragEnter}
             onDragLeave={handleDragLeave}

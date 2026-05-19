@@ -3,6 +3,14 @@ export type LoadedImage = {
   imageData: ImageData
 }
 
+export type PaletteColor = {
+  r: number
+  g: number
+  b: number
+  hex: string
+  count: number
+}
+
 export type HistoryEntry = {
   id: number
   label: string

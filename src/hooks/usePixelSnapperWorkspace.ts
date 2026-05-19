@@ -6,6 +6,7 @@ import { applySelectionCutout } from '../lib/colorCutout'
 import { errorMessage } from '../lib/errors'
 import { cloneImageData, fileToImageData, imageDataToBlob } from '../lib/imageData'
 import { clamp } from '../lib/number'
+import { collectImagePalette } from '../lib/palette'
 import { cropSelectionToImage } from '../lib/selectionCrop'
 import {
   defaultPixelSnapperConfig,
@@ -23,12 +24,14 @@ import {
   type ResizeConfig,
 } from '../resize'
 import type { ExpandedImage, HistoryEntry, LoadedImage } from '../types/images'
+import type { PaletteColor } from '../types/images'
 
 export type ProcessingMethod = 'pixelSnap' | 'resize' | 'quantize'
 
 export function usePixelSnapperWorkspace() {
   const [currentImage, setCurrentImage] = useState<LoadedImage | null>(null)
   const [previewImage, setPreviewImage] = useState<ImageData | null>(null)
+  const [resultPalette, setResultPalette] = useState<PaletteColor[]>([])
   const [history, setHistory] = useState<HistoryEntry[]>([])
   const [activeMethod, setActiveMethod] = useState<ProcessingMethod>('pixelSnap')
   const [pixelSnapConfig, setPixelSnapConfig] = useState<PixelSnapperConfig>(
@@ -61,6 +64,7 @@ export function usePixelSnapperWorkspace() {
 
     setError(null)
     setPreviewImage(null)
+    setResultPalette([])
     setIsLoadingImage(true)
 
     try {
@@ -84,6 +88,7 @@ export function usePixelSnapperWorkspace() {
     nextHistoryIdRef.current = 1
     setCurrentImage(loaded)
     setPreviewImage(null)
+    setResultPalette([])
     setError(null)
     setHistory([])
     pushHistory('Original', fileName, imageData)
@@ -155,9 +160,15 @@ export function usePixelSnapperWorkspace() {
           activeMethod === 'pixelSnap' ? 'Pixel Snap' : activeMethod === 'quantize' ? 'Quantize' : 'Resize'
         const nextLabel = `${methodLabel} #${history.length}`
         setPreviewImage(processed)
+        setResultPalette(
+          activeMethod === 'pixelSnap' || activeMethod === 'quantize'
+            ? collectImagePalette(processed)
+            : [],
+        )
         pushHistory(nextLabel, currentImage.fileName, processed)
       } catch (processingError) {
         setPreviewImage(null)
+        setResultPalette([])
         setError(errorMessage(processingError))
       } finally {
         setIsProcessing(false)
@@ -172,6 +183,7 @@ export function usePixelSnapperWorkspace() {
 
     setCurrentImage({ ...currentImage, imageData: cloneImageData(previewImage) })
     setPreviewImage(null)
+    setResultPalette([])
     setError(null)
   }
 
@@ -181,6 +193,7 @@ export function usePixelSnapperWorkspace() {
       imageData: cloneImageData(entry.imageData),
     })
     setPreviewImage(null)
+    setResultPalette([])
     setError(null)
   }
 
@@ -234,6 +247,7 @@ export function usePixelSnapperWorkspace() {
       const nextLabel = `Color Cutout #${history.length}`
       setCurrentImage({ ...currentImage, imageData: cutoutImage })
       setPreviewImage(null)
+      setResultPalette([])
       setError(null)
       pushHistory(nextLabel, currentImage.fileName, cutoutImage)
     } catch (cutoutError) {
@@ -251,6 +265,7 @@ export function usePixelSnapperWorkspace() {
       const nextLabel = `Selection Crop #${history.length}`
       setCurrentImage({ ...currentImage, imageData: croppedImage })
       setPreviewImage(null)
+      setResultPalette([])
       setError(null)
       pushHistory(nextLabel, currentImage.fileName, croppedImage)
     } catch (cropError) {
@@ -281,6 +296,7 @@ export function usePixelSnapperWorkspace() {
     pixelSnapConfig,
     quantizeConfig,
     previewImage,
+    resultPalette,
     resetActiveConfig,
     resizeConfig,
     setExpandedImage,

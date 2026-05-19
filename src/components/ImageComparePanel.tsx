@@ -25,6 +25,7 @@ import {
   createRectangleSelectionMask,
   type ImagePoint,
 } from '../lib/selectionCrop'
+import type { PaletteColor } from '../types/images'
 
 const MIN_ZOOM = 0.1
 const MAX_ZOOM = 16
@@ -116,6 +117,7 @@ export function ImageComparePanel({
   isLoadingImage = false,
   isProcessing = false,
   resultImage,
+  resultPalette,
   targetImage,
   onDragEnter,
   onDragLeave,
@@ -135,6 +137,7 @@ export function ImageComparePanel({
   isLoadingImage?: boolean
   isProcessing?: boolean
   resultImage: ImageData | null
+  resultPalette: PaletteColor[]
   targetImage: ImageData | null
   onDragEnter?: (event: DragEvent<HTMLDivElement>) => void
   onDragLeave?: () => void
@@ -652,6 +655,23 @@ export function ImageComparePanel({
             <Scissors size={13} />
             <span>Cut out</span>
           </button>
+        </div>
+      ) : null}
+      {resultImage && resultPalette.length > 0 ? (
+        <div className="flex min-h-9 items-center gap-2 border-b border-zinc-300 bg-white px-2 py-1.5 text-[11px] text-zinc-600">
+          <span className="shrink-0 font-medium text-zinc-800">
+            Palette {resultPalette.length} colors
+          </span>
+          <div className="flex min-w-0 flex-1 gap-1 overflow-x-auto py-0.5">
+            {resultPalette.map((color) => (
+              <span
+                key={color.hex}
+                className="h-5 w-5 shrink-0 rounded-sm border border-zinc-300 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.35)]"
+                style={{ backgroundColor: color.hex }}
+                title={`${color.hex} / ${color.count.toLocaleString()} px`}
+              />
+            ))}
+          </div>
         </div>
       ) : null}
       {isShapeSelectionTool ? (
