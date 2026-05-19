@@ -130,16 +130,14 @@ export function processQuantize(
   const palette =
     config.method === 'medianCut'
       ? medianCutPalette(colors, k)
-      : config.method === 'octreeFast'
-        ? octreeFastPalette(colors, k)
-        : refinePalette(
-            colors,
-            config.method === 'oklabRefine'
-              ? seededPalette(colors, k, config.seed, 'oklab')
-              : octreeFastPalette(colors, k),
-            config.refineIterations,
-            config.method === 'oklabRefine' ? 'oklab' : 'rgb',
-          )
+      : refinePalette(
+          colors,
+          config.method === 'oklabRefine'
+            ? seededPalette(colors, k, config.seed, 'oklab')
+            : octreeDiversePalette(colors, k),
+          config.refineIterations,
+          config.method === 'oklabRefine' ? 'oklab' : 'rgb',
+        )
 
   const metric = config.method === 'oklabRefine' ? 'oklab' : 'rgb'
   const output = applyPalette(source, palette, metric)
@@ -288,9 +286,9 @@ function createColorBox(colors: WeightedColor[]): ColorBox {
   }
 }
 
-function octreeFastPalette(colors: WeightedColor[], k: number): Rgb[] {
+function octreeDiversePalette(colors: WeightedColor[], k: number): Rgb[] {
   let buckets = octreeBucketsFromColors(colors, OCTREE_BUCKET_BITS)
-  for (let bits = OCTREE_BUCKET_BITS + 1; bits <= 8 && buckets.length < k; bits += 1) {
+  for (let bits = OCTREE_BUCKET_BITS + 1; bits <= 8 && buckets.length < k * 4; bits += 1) {
     buckets = octreeBucketsFromColors(colors, bits)
   }
   buckets.sort((a, b) => b.count - a.count)
@@ -298,26 +296,34 @@ function octreeFastPalette(colors: WeightedColor[], k: number): Rgb[] {
     return buckets.map((bucket) => bucket.rgb)
   }
 
-  const palette = buckets.slice(0, k).map((bucket) => ({ rgb: [...bucket.rgb] as Rgb, count: bucket.count }))
+  const palette: WeightedColor[] = [{ rgb: [...buckets[0].rgb] as Rgb, count: buckets[0].count }]
+  const selectedBucketIndexes = new Set<number>([0])
 
-  for (const bucket of buckets.slice(k)) {
-    let nearest = 0
-    let nearestDist = Number.MAX_VALUE
-    for (let i = 0; i < palette.length; i += 1) {
-      const d = distSq(bucket.rgb, palette[i].rgb)
-      if (d < nearestDist) {
-        nearestDist = d
-        nearest = i
+  while (palette.length < k) {
+    let nextBucket = buckets[palette.length]
+    let nextBucketIndex = palette.length
+    let nextScore = -1
+    for (let bucketIndex = 0; bucketIndex < buckets.length; bucketIndex += 1) {
+      if (selectedBucketIndexes.has(bucketIndex)) {
+        continue
+      }
+      const bucket = buckets[bucketIndex]
+      let nearestDist = Number.MAX_VALUE
+      for (const entry of palette) {
+        nearestDist = Math.min(nearestDist, distSq(bucket.rgb, entry.rgb))
+      }
+      const score = nearestDist * Math.sqrt(bucket.count)
+      if (score > nextScore) {
+        nextScore = score
+        nextBucket = bucket
+        nextBucketIndex = bucketIndex
       }
     }
-    const target = palette[nearest]
-    const total = target.count + bucket.count
-    target.rgb = [
-      (target.rgb[0] * target.count + bucket.rgb[0] * bucket.count) / total,
-      (target.rgb[1] * target.count + bucket.rgb[1] * bucket.count) / total,
-      (target.rgb[2] * target.count + bucket.rgb[2] * bucket.count) / total,
-    ]
-    target.count = total
+    palette.push({ rgb: [...nextBucket.rgb] as Rgb, count: nextBucket.count })
+    selectedBucketIndexes.add(nextBucketIndex)
+    if (palette.length >= buckets.length) {
+      break
+    }
   }
 
   return palette.map((entry) => entry.rgb)

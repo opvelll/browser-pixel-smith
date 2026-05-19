@@ -4,7 +4,7 @@ export type RgbaImageData = {
   data: Uint8ClampedArray
 }
 
-export type QuantizeMethod = 'medianCut' | 'oklabRefine' | 'octreeRefine' | 'octreeFast'
+export type QuantizeMethod = 'medianCut' | 'oklabRefine' | 'octreeRefine'
 
 export type QuantizeConfig = {
   colors: number

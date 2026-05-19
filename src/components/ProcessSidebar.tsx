@@ -197,11 +197,6 @@ export function ProcessSidebar({
                 />
               ))}
             </div>
-            {quantizeConfig.method === 'octreeFast' ? (
-              <div className="px-4 py-2 text-[11px] leading-4 text-zinc-500">
-                Seed and refine iter are unused by fast mode.
-              </div>
-            ) : null}
           </div>
         ) : (
           <div className="divide-y divide-zinc-200">

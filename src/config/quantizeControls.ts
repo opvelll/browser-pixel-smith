@@ -39,5 +39,4 @@ export const QUANTIZE_METHOD_OPTIONS: Array<{
   { method: 'medianCut', label: 'Median Cut', hint: 'balanced' },
   { method: 'oklabRefine', label: 'OKLab + Refine', hint: 'perceptual' },
   { method: 'octreeRefine', label: 'Octree + Refine', hint: 'detailed' },
-  { method: 'octreeFast', label: 'Octree Fast', hint: 'fastest' },
 ]
