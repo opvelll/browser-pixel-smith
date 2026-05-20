@@ -1,5 +1,11 @@
 import type { PaletteColor } from '../types/images'
 
+export type RgbColor = {
+  r: number
+  g: number
+  b: number
+}
+
 function toHexChannel(value: number) {
   return value.toString(16).padStart(2, '0').toUpperCase()
 }
@@ -30,4 +36,55 @@ export function collectImagePalette(imageData: ImageData): PaletteColor[] {
     const countComparison = b.count - a.count
     return countComparison === 0 ? a.hex.localeCompare(b.hex) : countComparison
   })
+}
+
+export function createExactColorMask(imageData: ImageData, color: RgbColor) {
+  const mask = new Uint8Array(imageData.width * imageData.height)
+
+  for (let index = 0; index < mask.length; index += 1) {
+    const offset = index * 4
+    if (imageData.data[offset + 3] === 0) {
+      continue
+    }
+
+    if (
+      imageData.data[offset] === color.r &&
+      imageData.data[offset + 1] === color.g &&
+      imageData.data[offset + 2] === color.b
+    ) {
+      mask[index] = 1
+    }
+  }
+
+  return mask
+}
+
+export function replaceImageColor(
+  imageData: ImageData,
+  beforeColor: RgbColor,
+  afterColor: RgbColor,
+) {
+  const nextImageData = new ImageData(
+    Uint8ClampedArray.from(imageData.data),
+    imageData.width,
+    imageData.height,
+  )
+
+  for (let i = 0; i < nextImageData.data.length; i += 4) {
+    if (nextImageData.data[i + 3] === 0) {
+      continue
+    }
+
+    if (
+      nextImageData.data[i] === beforeColor.r &&
+      nextImageData.data[i + 1] === beforeColor.g &&
+      nextImageData.data[i + 2] === beforeColor.b
+    ) {
+      nextImageData.data[i] = afterColor.r
+      nextImageData.data[i + 1] = afterColor.g
+      nextImageData.data[i + 2] = afterColor.b
+    }
+  }
+
+  return nextImageData
 }

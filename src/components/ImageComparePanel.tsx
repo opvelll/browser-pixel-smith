@@ -5,6 +5,7 @@ import {
   LassoSelect,
   LoaderCircle,
   Maximize2,
+  Palette,
   Pipette,
   SquareDashedMousePointer,
   Scissors,
@@ -20,6 +21,12 @@ import {
   type RgbaColor,
 } from '../lib/colorCutout'
 import { drawImageData } from '../lib/imageData'
+import {
+  createExactColorMask,
+  collectImagePalette,
+  replaceImageColor,
+  type RgbColor,
+} from '../lib/palette'
 import {
   createLassoSelectionMask,
   createRectangleSelectionMask,
@@ -44,9 +51,27 @@ type SelectionOverlayCache = {
   width: number
   height: number
 }
+type PaletteEditState = {
+  afterColor: RgbColor
+  beforeColor: PaletteColor
+  isPicking: boolean
+  source: 'result' | 'target'
+}
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value))
+}
+
+function colorLabel(color: RgbColor) {
+  return `rgb(${color.r}, ${color.g}, ${color.b})`
+}
+
+function colorsEqual(first: RgbColor, second: RgbColor) {
+  return first.r === second.r && first.g === second.g && first.b === second.b
+}
+
+function paletteColorToRgb(color: PaletteColor): RgbColor {
+  return { r: color.r, g: color.g, b: color.b }
 }
 
 function createSelectionBoundaryEdges(mask: Uint8Array, width: number, height: number) {
@@ -216,12 +241,15 @@ export function ImageComparePanel({
   onDragOver,
   onDrop,
   onApplyColorCutout,
+  onApplyPaletteColorReplace,
   onApplySelectionCrop,
+  onApplyTargetPaletteColorReplace,
   onDownloadResult,
   onDownloadTarget,
   onExpandResult,
   onExpandTarget,
   onOpen3dCapture,
+  onPromoteResultToTargetForPalette,
   onSetResultAsTarget,
 }: {
   fileInputRef: RefObject<HTMLInputElement | null>
@@ -236,12 +264,15 @@ export function ImageComparePanel({
   onDragOver?: (event: DragEvent<HTMLDivElement>) => void
   onDrop?: (event: DragEvent<HTMLDivElement>) => void
   onApplyColorCutout?: (selectionMask: Uint8Array) => void
+  onApplyPaletteColorReplace?: (beforeColor: RgbColor, afterColor: RgbColor) => void
   onApplySelectionCrop?: (selectionMask: Uint8Array) => void
+  onApplyTargetPaletteColorReplace?: (beforeColor: RgbColor, afterColor: RgbColor) => void
   onDownloadResult?: () => void
   onDownloadTarget?: () => void
   onExpandResult?: () => void
   onExpandTarget?: () => void
   onOpen3dCapture?: () => void
+  onPromoteResultToTargetForPalette?: () => void
   onSetResultAsTarget?: () => void
 }) {
   const targetCanvasRef = useRef<HTMLCanvasElement>(null)
@@ -263,10 +294,37 @@ export function ImageComparePanel({
   } | null>(null)
   const [dragStart, setDragStart] = useState<ImagePoint | null>(null)
   const [lassoPoints, setLassoPoints] = useState<ImagePoint[]>([])
+  const [paletteEdit, setPaletteEdit] = useState<PaletteEditState | null>(null)
+  const [isTargetPaletteOpen, setIsTargetPaletteOpen] = useState(false)
   const [tolerance, setTolerance] = useState(24)
   const selectedColor = selectedSample?.image === targetImage ? selectedSample.color : null
-  const isSelectionTool = toolMode !== 'none'
+  const isPaletteEditing = Boolean(paletteEdit)
+  const isPalettePicking = Boolean(paletteEdit?.isPicking)
+  const isSelectionTool = toolMode !== 'none' || isPaletteEditing
   const isShapeSelectionTool = toolMode === 'rectangle' || toolMode === 'lasso'
+  const targetPalette = useMemo(
+    () => (targetImage && isTargetPaletteOpen ? collectImagePalette(targetImage) : []),
+    [isTargetPaletteOpen, targetImage],
+  )
+  const activePalette = paletteEdit?.source === 'target' ? targetPalette : resultPalette
+  const paletteEditImage = paletteEdit?.source === 'target' ? targetImage : resultImage
+  const displayedResultImage = useMemo(() => {
+    if (!paletteEdit) {
+      return resultImage
+    }
+
+    const sourceImage = paletteEdit.source === 'target' ? targetImage : resultImage
+    if (!sourceImage) {
+      return resultImage
+    }
+
+    if (colorsEqual(paletteEdit.beforeColor, paletteEdit.afterColor)) {
+      return paletteEdit.source === 'target' ? null : resultImage
+    }
+
+    return replaceImageColor(sourceImage, paletteEdit.beforeColor, paletteEdit.afterColor)
+  }, [paletteEdit, resultImage, targetImage])
+  const hasResultView = Boolean(displayedResultImage)
 
   const colorSelectionMask = useMemo(() => {
     if (!targetImage || !selectedColor || toolMode !== 'color') {
@@ -275,17 +333,25 @@ export function ImageComparePanel({
 
     return createColorSelectionMask(targetImage, selectedColor, tolerance)
   }, [selectedColor, targetImage, tolerance, toolMode])
-  const manualSelectionMask =
-    manualSelection?.image === targetImage && isShapeSelectionTool ? manualSelection.mask : null
-  const selectionMask = colorSelectionMask ?? manualSelectionMask
-  const selectionCount = useMemo(() => countSelectionPixels(selectionMask), [selectionMask])
-  const selectionOverlayCache = useMemo(() => {
-    if (!targetImage || selectionCount === 0) {
+  const paletteSelectionMask = useMemo(() => {
+    if (!paletteEditImage || !paletteEdit) {
       return null
     }
 
-    return createSelectionOverlayCache(selectionMask, targetImage.width, targetImage.height)
-  }, [selectionCount, selectionMask, targetImage])
+    return createExactColorMask(paletteEditImage, paletteEdit.beforeColor)
+  }, [paletteEdit, paletteEditImage])
+  const manualSelectionMask =
+    manualSelection?.image === targetImage && isShapeSelectionTool ? manualSelection.mask : null
+  const selectionMask = paletteSelectionMask ?? colorSelectionMask ?? manualSelectionMask
+  const selectionCount = useMemo(() => countSelectionPixels(selectionMask), [selectionMask])
+  const selectionImage = paletteSelectionMask ? paletteEditImage : targetImage
+  const selectionOverlayCache = useMemo(() => {
+    if (!selectionImage || selectionCount === 0) {
+      return null
+    }
+
+    return createSelectionOverlayCache(selectionMask, selectionImage.width, selectionImage.height)
+  }, [selectionCount, selectionImage, selectionMask])
 
   useEffect(() => {
     if (targetImage) {
@@ -294,10 +360,10 @@ export function ImageComparePanel({
   }, [targetImage])
 
   useEffect(() => {
-    if (resultImage) {
-      drawImageData(resultCanvasRef.current, resultImage)
+    if (displayedResultImage) {
+      drawImageData(resultCanvasRef.current, displayedResultImage)
     }
-  }, [resultImage])
+  }, [displayedResultImage])
 
   useEffect(() => {
     if (!selectionOverlayCache) {
@@ -373,8 +439,10 @@ export function ImageComparePanel({
     }
   }, [resultImage, targetImage])
 
-  const baseWidth = targetImage?.width ?? resultImage?.width ?? 1
-  const baseHeight = targetImage?.height ?? resultImage?.height ?? 1
+  const baseWidth =
+    isPaletteEditing && paletteEditImage ? paletteEditImage.width : targetImage?.width ?? resultImage?.width ?? 1
+  const baseHeight =
+    isPaletteEditing && paletteEditImage ? paletteEditImage.height : targetImage?.height ?? resultImage?.height ?? 1
   const displayWidth = Math.max(1, baseWidth * zoom)
   const displayHeight = Math.max(1, baseHeight * zoom)
   const targetMeta = targetImage
@@ -384,19 +452,30 @@ export function ImageComparePanel({
       : 'Drop image'
   const resultMeta = resultImage
     ? `${resultImage.width} x ${resultImage.height}`
+    : displayedResultImage
+      ? `${displayedResultImage.width} x ${displayedResultImage.height}`
     : isProcessing
       ? 'Processing'
       : 'Waiting'
-  const selectedColorLabel = selectedColor
-    ? `rgb(${selectedColor.r}, ${selectedColor.g}, ${selectedColor.b})`
-    : 'No color'
+  const selectedColorLabel = selectedColor ? colorLabel(selectedColor) : 'No color'
+  const canApplyPaletteEdit =
+    selectionCount > 0 &&
+    Boolean(
+      paletteEdit?.source === 'target' ? onApplyTargetPaletteColorReplace : onApplyPaletteColorReplace,
+    )
 
-  const clearToolState = () => {
+  const clearSelectionToolState = () => {
     setToolMode('none')
     setSelectedSample(null)
     setManualSelection(null)
     setDragStart(null)
     setLassoPoints([])
+  }
+
+  const clearToolState = () => {
+    clearSelectionToolState()
+    setPaletteEdit(null)
+    setIsTargetPaletteOpen(false)
   }
 
   const updateDivider = (clientX: number) => {
@@ -421,6 +500,94 @@ export function ImageComparePanel({
     const x = Math.floor(((clientX - rect.left) / rect.width) * targetImage.width)
     const y = Math.floor(((clientY - rect.top) / rect.height) * targetImage.height)
     setSelectedSample({ color: getPixelColor(targetImage, x, y), image: targetImage })
+  }
+
+  const sampleCanvasColor = (
+    imageData: ImageData | null,
+    canvas: HTMLCanvasElement | null,
+    clientX: number,
+    clientY: number,
+  ): RgbColor | null => {
+    if (!imageData || !canvas) {
+      return null
+    }
+
+    const rect = canvas.getBoundingClientRect()
+    const rawX = Math.floor(((clientX - rect.left) / rect.width) * imageData.width)
+    const rawY = Math.floor(((clientY - rect.top) / rect.height) * imageData.height)
+    const color = getPixelColor(
+      imageData,
+      clamp(rawX, 0, imageData.width - 1),
+      clamp(rawY, 0, imageData.height - 1),
+    )
+
+    return { r: color.r, g: color.g, b: color.b }
+  }
+
+  const startPaletteEdit = (color: PaletteColor, source: PaletteEditState['source']) => {
+    if ((source === 'target' && !targetImage) || (source === 'result' && !resultImage)) {
+      return
+    }
+
+    clearSelectionToolState()
+    setPaletteEdit({
+      afterColor: paletteColorToRgb(color),
+      beforeColor: color,
+      isPicking: false,
+      source,
+    })
+  }
+
+  const choosePaletteAfterColor = (color: PaletteColor) => {
+    setPaletteEdit((current) =>
+      current
+        ? {
+            ...current,
+            afterColor: paletteColorToRgb(color),
+            isPicking: false,
+          }
+        : current,
+    )
+  }
+
+  const samplePaletteAfterColor = (
+    imageData: ImageData | null,
+    canvas: HTMLCanvasElement | null,
+    clientX: number,
+    clientY: number,
+  ) => {
+    if (!paletteEdit?.isPicking) {
+      return false
+    }
+
+    const color = sampleCanvasColor(imageData, canvas, clientX, clientY)
+    if (!color) {
+      return false
+    }
+
+    setPaletteEdit((current) =>
+      current
+        ? {
+            ...current,
+            afterColor: color,
+            isPicking: false,
+          }
+        : current,
+    )
+    return true
+  }
+
+  const applyPaletteEdit = () => {
+    if (!paletteEdit) {
+      return
+    }
+
+    if (paletteEdit.source === 'target') {
+      onApplyTargetPaletteColorReplace?.(paletteEdit.beforeColor, paletteEdit.afterColor)
+    } else {
+      onApplyPaletteColorReplace?.(paletteEdit.beforeColor, paletteEdit.afterColor)
+    }
+    clearToolState()
   }
 
   const cutoutSelection = () => {
@@ -546,10 +713,23 @@ export function ImageComparePanel({
 
   const toggleTool = (nextTool: Exclude<ToolMode, 'none'>) => {
     setToolMode((currentTool) => (currentTool === nextTool ? 'none' : nextTool))
+    setPaletteEdit(null)
+    setIsTargetPaletteOpen(false)
     setSelectedSample(null)
     setManualSelection(null)
     setDragStart(null)
     setLassoPoints([])
+  }
+
+  const toggleTargetPalette = () => {
+    clearSelectionToolState()
+    setPaletteEdit(null)
+    if (resultImage && onPromoteResultToTargetForPalette) {
+      onPromoteResultToTargetForPalette()
+      setIsTargetPaletteOpen(true)
+      return
+    }
+    setIsTargetPaletteOpen((current) => !current)
   }
 
   return (
@@ -612,6 +792,19 @@ export function ImageComparePanel({
             onClick={() => toggleTool('color')}
           >
             <Pipette size={13} />
+          </button>
+          <button
+            className={`inline-flex h-6 w-6 items-center justify-center rounded border text-zinc-700 disabled:cursor-not-allowed disabled:opacity-40 ${
+              isTargetPaletteOpen
+                ? 'border-cyan-600 bg-cyan-50 text-cyan-800'
+                : 'border-zinc-300 bg-white hover:bg-zinc-100'
+            }`}
+            disabled={!targetImage || !onApplyTargetPaletteColorReplace}
+            title="Target palette edit"
+            type="button"
+            onClick={toggleTargetPalette}
+          >
+            <Palette size={13} />
           </button>
           <button
             className={`inline-flex h-6 w-6 items-center justify-center rounded border text-zinc-700 disabled:cursor-not-allowed disabled:opacity-40 ${
@@ -755,6 +948,29 @@ export function ImageComparePanel({
           </button>
         </div>
       ) : null}
+      {isTargetPaletteOpen && targetPalette.length > 0 ? (
+        <div className="flex min-h-9 items-center gap-2 border-b border-zinc-300 bg-white px-2 py-1.5 text-[11px] text-zinc-600">
+          <span className="shrink-0 font-medium text-zinc-800">
+            Target Palette {targetPalette.length} colors
+          </span>
+          <div className="flex min-w-0 flex-1 gap-1 overflow-x-auto py-0.5">
+            {targetPalette.map((color) => (
+              <button
+                key={color.hex}
+                className={`h-5 w-5 shrink-0 rounded-sm border shadow-[inset_0_0_0_1px_rgba(255,255,255,0.35)] hover:border-cyan-700 ${
+                  paletteEdit?.source === 'target' && paletteEdit.beforeColor.hex === color.hex
+                    ? 'border-cyan-700 ring-2 ring-cyan-200'
+                    : 'border-zinc-300'
+                }`}
+                style={{ backgroundColor: color.hex }}
+                title={`${color.hex} / ${color.count.toLocaleString()} px`}
+                type="button"
+                onClick={() => startPaletteEdit(color, 'target')}
+              />
+            ))}
+          </div>
+        </div>
+      ) : null}
       {resultImage && resultPalette.length > 0 ? (
         <div className="flex min-h-9 items-center gap-2 border-b border-zinc-300 bg-white px-2 py-1.5 text-[11px] text-zinc-600">
           <span className="shrink-0 font-medium text-zinc-800">
@@ -762,14 +978,84 @@ export function ImageComparePanel({
           </span>
           <div className="flex min-w-0 flex-1 gap-1 overflow-x-auto py-0.5">
             {resultPalette.map((color) => (
-              <span
+              <button
                 key={color.hex}
-                className="h-5 w-5 shrink-0 rounded-sm border border-zinc-300 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.35)]"
+                className={`h-5 w-5 shrink-0 rounded-sm border shadow-[inset_0_0_0_1px_rgba(255,255,255,0.35)] hover:border-cyan-700 ${
+                  paletteEdit?.source === 'result' && paletteEdit.beforeColor.hex === color.hex
+                    ? 'border-cyan-700 ring-2 ring-cyan-200'
+                    : 'border-zinc-300'
+                }`}
                 style={{ backgroundColor: color.hex }}
                 title={`${color.hex} / ${color.count.toLocaleString()} px`}
+                type="button"
+                onClick={() => startPaletteEdit(color, 'result')}
               />
             ))}
           </div>
+        </div>
+      ) : null}
+      {paletteEditImage && paletteEdit ? (
+        <div className="flex min-h-12 flex-wrap items-center gap-3 border-b border-zinc-300 bg-zinc-100 px-2 py-2 text-[11px] text-zinc-600">
+          <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto py-0.5">
+            {activePalette
+              .filter((color) => color.hex !== paletteEdit.beforeColor.hex)
+              .map((color) => (
+                <button
+                  key={color.hex}
+                  className={`h-6 w-6 shrink-0 rounded-sm border shadow-[inset_0_0_0_1px_rgba(255,255,255,0.35)] hover:border-cyan-700 ${
+                    colorsEqual(color, paletteEdit.afterColor)
+                      ? 'border-cyan-700 ring-2 ring-cyan-200'
+                      : 'border-zinc-300'
+                  }`}
+                  style={{ backgroundColor: color.hex }}
+                  title={`Use ${color.hex}`}
+                  type="button"
+                  onClick={() => choosePaletteAfterColor(color)}
+                />
+              ))}
+          </div>
+          <button
+            className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded border ${
+              paletteEdit.isPicking
+                ? 'border-cyan-600 bg-cyan-50 text-cyan-800'
+                : 'border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100'
+            }`}
+            title="Pick replacement color"
+            type="button"
+            onClick={() =>
+              setPaletteEdit((current) =>
+                current ? { ...current, isPicking: !current.isPicking } : current,
+              )
+            }
+          >
+            <Pipette size={13} />
+          </button>
+          <div className="flex items-center gap-1.5">
+            <span className="font-medium text-zinc-800">Before</span>
+            <span
+              className="h-5 w-5 rounded-sm border border-zinc-300"
+              style={{ backgroundColor: paletteEdit.beforeColor.hex }}
+            />
+            <span className="tabular-nums">{colorLabel(paletteEdit.beforeColor)}</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="font-medium text-zinc-800">After</span>
+            <span
+              className="h-5 w-5 rounded-sm border border-zinc-300"
+              style={{ backgroundColor: colorLabel(paletteEdit.afterColor) }}
+            />
+            <span className="tabular-nums">{colorLabel(paletteEdit.afterColor)}</span>
+          </div>
+          <span className="tabular-nums">{selectionCount.toLocaleString()} px</span>
+          <button
+            className="inline-flex h-7 shrink-0 items-center justify-center rounded border border-zinc-300 bg-white px-3 font-medium text-zinc-800 hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-40"
+            disabled={!canApplyPaletteEdit}
+            title="Commit palette color replacement"
+            type="button"
+            onClick={applyPaletteEdit}
+          >
+            Commit
+          </button>
         </div>
       ) : null}
       {isShapeSelectionTool ? (
@@ -836,11 +1122,11 @@ export function ImageComparePanel({
               <canvas
                 ref={targetCanvasRef}
                 className={`absolute inset-0 block [image-rendering:pixelated] ${
-                  isSelectionTool ? 'cursor-crosshair' : ''
+                  toolMode !== 'none' || isPalettePicking ? 'cursor-crosshair' : ''
                 }`}
                 style={{
                   clipPath:
-                    resultImage && !isSelectionTool
+                    hasResultView && (!isSelectionTool || isPalettePicking)
                       ? `inset(0 ${100 - divider}% 0 0)`
                       : undefined,
                   height: displayHeight,
@@ -848,6 +1134,17 @@ export function ImageComparePanel({
                 }}
                 onDoubleClick={onExpandTarget}
                 onPointerDown={(event) => {
+                  if (
+                    samplePaletteAfterColor(
+                      targetImage,
+                      targetCanvasRef.current,
+                      event.clientX,
+                      event.clientY,
+                    )
+                  ) {
+                    event.preventDefault()
+                    return
+                  }
                   if (toolMode === 'color') {
                     event.preventDefault()
                     selectTargetColor(event.clientX, event.clientY)
@@ -861,28 +1158,44 @@ export function ImageComparePanel({
                 onPointerCancel={finishShapeSelection}
               />
             ) : null}
-            {resultImage && !isSelectionTool ? (
+            {displayedResultImage && (isPaletteEditing || !isSelectionTool) ? (
               <canvas
                 ref={resultCanvasRef}
                 className={`absolute inset-0 block [image-rendering:pixelated] ${
-                  isSelectionTool ? 'pointer-events-none' : ''
+                  isPalettePicking ? 'cursor-crosshair' : isPaletteEditing ? '' : ''
                 }`}
                 style={{
-                  clipPath: `inset(0 0 0 ${divider}%)`,
+                  clipPath: isPalettePicking
+                    ? `inset(0 0 0 ${divider}%)`
+                    : isPaletteEditing
+                      ? undefined
+                      : `inset(0 0 0 ${divider}%)`,
                   height: displayHeight,
                   width: displayWidth,
                 }}
                 onDoubleClick={onExpandResult}
+                onPointerDown={(event) => {
+                  if (
+                    samplePaletteAfterColor(
+                      displayedResultImage,
+                      resultCanvasRef.current,
+                      event.clientX,
+                      event.clientY,
+                    )
+                  ) {
+                    event.preventDefault()
+                  }
+                }}
               />
             ) : null}
-            {targetImage ? (
+            {selectionImage ? (
               <canvas
                 ref={selectionCanvasRef}
                 className="pointer-events-none absolute inset-0 z-[9] block [image-rendering:pixelated]"
                 style={{ height: displayHeight, width: displayWidth }}
               />
             ) : null}
-            {targetImage && resultImage && !isSelectionTool ? (
+            {targetImage && hasResultView && !isSelectionTool ? (
               <button
                 aria-label="Adjust target result comparison"
                 className={`absolute inset-y-0 z-10 w-6 -translate-x-1/2 cursor-ew-resize touch-none ${

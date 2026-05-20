@@ -11,7 +11,9 @@ function App() {
   const {
     activeMethod,
     applyColorCutout,
+    applyPaletteColorReplace,
     applySelectionCrop,
+    applyTargetPaletteColorReplace,
     applyProcessing,
     currentImage,
     downloadCurrentImage,
@@ -108,7 +110,9 @@ function App() {
             }}
             onDrop={handleDrop}
             onApplyColorCutout={applyColorCutout}
+            onApplyPaletteColorReplace={applyPaletteColorReplace}
             onApplySelectionCrop={applySelectionCrop}
+            onApplyTargetPaletteColorReplace={applyTargetPaletteColorReplace}
             onDownloadResult={previewImage ? downloadResultImage : undefined}
             onDownloadTarget={currentImage ? downloadTargetImage : undefined}
             onExpandResult={
@@ -125,6 +129,7 @@ function App() {
               resetComparePanelTools()
               setIsModelCaptureOpen(true)
             }}
+            onPromoteResultToTargetForPalette={previewImage ? setResultAsTarget : undefined}
             onSetResultAsTarget={
               previewImage
                 ? () => {

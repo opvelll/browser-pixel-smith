@@ -6,7 +6,7 @@ import { applySelectionCutout } from '../lib/colorCutout'
 import { errorMessage } from '../lib/errors'
 import { cloneImageData, fileToImageData, imageDataToBlob } from '../lib/imageData'
 import { clamp } from '../lib/number'
-import { collectImagePalette } from '../lib/palette'
+import { collectImagePalette, replaceImageColor, type RgbColor } from '../lib/palette'
 import { cropSelectionToImage } from '../lib/selectionCrop'
 import {
   defaultPixelSnapperConfig,
@@ -187,6 +187,42 @@ export function usePixelSnapperWorkspace() {
     setError(null)
   }
 
+  const applyPaletteColorReplace = (beforeColor: RgbColor, afterColor: RgbColor) => {
+    if (!currentImage || !previewImage || isProcessing) {
+      return
+    }
+
+    try {
+      const previousResult = cloneImageData(previewImage)
+      const replacedImage = replaceImageColor(previewImage, beforeColor, afterColor)
+      const nextLabel = `Palette Edit #${history.length}`
+      setCurrentImage({ ...currentImage, imageData: previousResult })
+      setPreviewImage(replacedImage)
+      setResultPalette(collectImagePalette(replacedImage))
+      setError(null)
+      pushHistory(nextLabel, currentImage.fileName, replacedImage)
+    } catch (replaceError) {
+      setError(errorMessage(replaceError))
+    }
+  }
+
+  const applyTargetPaletteColorReplace = (beforeColor: RgbColor, afterColor: RgbColor) => {
+    if (!currentImage || isProcessing) {
+      return
+    }
+
+    try {
+      const replacedImage = replaceImageColor(currentImage.imageData, beforeColor, afterColor)
+      const nextLabel = `Target Palette Edit #${history.length}`
+      setPreviewImage(replacedImage)
+      setResultPalette(collectImagePalette(replacedImage))
+      setError(null)
+      pushHistory(nextLabel, currentImage.fileName, replacedImage)
+    } catch (replaceError) {
+      setError(errorMessage(replaceError))
+    }
+  }
+
   const setHistoryEntryAsTarget = (entry: HistoryEntry) => {
     setCurrentImage({
       fileName: entry.fileName,
@@ -279,6 +315,8 @@ export function usePixelSnapperWorkspace() {
 
   return {
     activeMethod,
+    applyPaletteColorReplace,
+    applyTargetPaletteColorReplace,
     applyProcessing,
     currentImage,
     applyColorCutout,
