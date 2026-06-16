@@ -1,5 +1,4 @@
 import {
-  Box,
   Download,
   ImagePlus,
   LassoSelect,
@@ -248,7 +247,6 @@ export function ImageComparePanel({
   onDownloadTarget,
   onExpandResult,
   onExpandTarget,
-  onOpen3dCapture,
   onPromoteResultToTargetForPalette,
   onSetResultAsTarget,
 }: {
@@ -271,7 +269,6 @@ export function ImageComparePanel({
   onDownloadTarget?: () => void
   onExpandResult?: () => void
   onExpandTarget?: () => void
-  onOpen3dCapture?: () => void
   onPromoteResultToTargetForPalette?: () => void
   onSetResultAsTarget?: () => void
 }) {
@@ -857,19 +854,6 @@ export function ImageComparePanel({
           >
             <ImagePlus size={13} />
           </button>
-          {onOpen3dCapture ? (
-            <button
-              className="inline-flex h-6 w-6 items-center justify-center rounded border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100"
-              title="Open 3D capture"
-              type="button"
-              onClick={() => {
-                clearToolState()
-                onOpen3dCapture()
-              }}
-            >
-              <Box size={13} />
-            </button>
-          ) : null}
           <button
             className="inline-flex h-6 w-6 items-center justify-center rounded border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-40"
             disabled={!targetImage || !onExpandTarget}

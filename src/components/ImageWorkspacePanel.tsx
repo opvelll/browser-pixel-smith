@@ -1,4 +1,4 @@
-import { Box, ImagePlus, Maximize2, Target, Zap } from 'lucide-react'
+import { ImagePlus, Maximize2, Target, Zap } from 'lucide-react'
 import type { DragEvent, RefObject } from 'react'
 
 export function ImageWorkspacePanel({
@@ -14,7 +14,6 @@ export function ImageWorkspacePanel({
   onDragOver,
   onDrop,
   onExpand,
-  onOpen3dCapture,
   onSetAsTarget,
 }: {
   canvasRef: RefObject<HTMLCanvasElement | null>
@@ -29,7 +28,6 @@ export function ImageWorkspacePanel({
   onDragOver?: (event: DragEvent<HTMLDivElement>) => void
   onDrop?: (event: DragEvent<HTMLDivElement>) => void
   onExpand?: () => void
-  onOpen3dCapture?: () => void
   onSetAsTarget?: () => void
 }) {
   const isEmpty = !image
@@ -61,16 +59,6 @@ export function ImageWorkspacePanel({
               onClick={() => fileInputRef.current?.click()}
             >
               <ImagePlus size={13} />
-            </button>
-          ) : null}
-          {onOpen3dCapture ? (
-            <button
-              className="inline-flex h-6 w-6 items-center justify-center rounded border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100"
-              title="Open 3D capture"
-              type="button"
-              onClick={onOpen3dCapture}
-            >
-              <Box size={13} />
             </button>
           ) : null}
           <button

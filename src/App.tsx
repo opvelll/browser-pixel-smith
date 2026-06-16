@@ -3,7 +3,6 @@ import { useRef, useState } from 'react'
 import { ExpandedImageDialog } from './components/ExpandedImageDialog'
 import { HistoryStrip } from './components/HistoryStrip'
 import { ImageComparePanel } from './components/ImageComparePanel'
-import { ModelCaptureDialog } from './components/ModelCaptureDialog'
 import { ProcessSidebar } from './components/ProcessSidebar'
 import { usePixelSnapperWorkspace } from './hooks/usePixelSnapperWorkspace'
 
@@ -35,7 +34,6 @@ function App() {
     setExpandedImage,
     setActiveMethod,
     setHistoryEntryAsTarget,
-    setImageAsTarget,
     setResultAsTarget,
     updateResizeAlgorithm,
     updateResizeScale,
@@ -44,7 +42,6 @@ function App() {
     updateConfig,
   } = usePixelSnapperWorkspace()
   const [isDragging, setIsDragging] = useState(false)
-  const [isModelCaptureOpen, setIsModelCaptureOpen] = useState(false)
   const [comparePanelResetKey, setComparePanelResetKey] = useState(0)
   const dragDepthRef = useRef(0)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -125,10 +122,6 @@ function App() {
                 ? () => openExpanded('Target', currentImage.fileName, currentImage.imageData)
                 : undefined
             }
-            onOpen3dCapture={() => {
-              resetComparePanelTools()
-              setIsModelCaptureOpen(true)
-            }}
             onPromoteResultToTargetForPalette={previewImage ? setResultAsTarget : undefined}
             onSetResultAsTarget={
               previewImage
@@ -182,16 +175,6 @@ function App() {
         />
       ) : null}
 
-      {isModelCaptureOpen ? (
-        <ModelCaptureDialog
-          onCapture={(fileName, imageData) => {
-            resetComparePanelTools()
-            setImageAsTarget(fileName, imageData)
-            setIsModelCaptureOpen(false)
-          }}
-          onClose={() => setIsModelCaptureOpen(false)}
-        />
-      ) : null}
     </main>
   )
 }
