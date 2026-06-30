@@ -31,6 +31,7 @@ function App() {
     resultPalette,
     resetActiveConfig,
     resizeConfig,
+    savePixelEdit,
     setExpandedImage,
     setActiveMethod,
     setHistoryEntryAsTarget,
@@ -99,6 +100,7 @@ function App() {
             resultImage={previewImage}
             resultPalette={resultPalette}
             targetImage={currentImage?.imageData ?? null}
+            history={history}
             onDragEnter={handleDragEnter}
             onDragLeave={handleDragLeave}
             onDragOver={(event) => {
@@ -123,6 +125,7 @@ function App() {
                 : undefined
             }
             onPromoteResultToTargetForPalette={previewImage ? setResultAsTarget : undefined}
+            onSavePixelEdit={currentImage ? savePixelEdit : undefined}
             onSetResultAsTarget={
               previewImage
                 ? () => {

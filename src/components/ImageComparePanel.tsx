@@ -5,6 +5,7 @@ import {
   LoaderCircle,
   Maximize2,
   Palette,
+  Paintbrush,
   Pipette,
   SquareDashedMousePointer,
   Scissors,
@@ -31,7 +32,8 @@ import {
   createRectangleSelectionMask,
   type ImagePoint,
 } from '../lib/selectionCrop'
-import type { PaletteColor } from '../types/images'
+import type { HistoryEntry, PaletteColor } from '../types/images'
+import { PixelPaintPanel } from './PixelPaintPanel'
 
 const MIN_ZOOM = 0.1
 const MAX_ZOOM = 16
@@ -235,6 +237,7 @@ export function ImageComparePanel({
   resultImage,
   resultPalette,
   targetImage,
+  history,
   onDragEnter,
   onDragLeave,
   onDragOver,
@@ -248,6 +251,7 @@ export function ImageComparePanel({
   onExpandResult,
   onExpandTarget,
   onPromoteResultToTargetForPalette,
+  onSavePixelEdit,
   onSetResultAsTarget,
 }: {
   fileInputRef: RefObject<HTMLInputElement | null>
@@ -257,6 +261,7 @@ export function ImageComparePanel({
   resultImage: ImageData | null
   resultPalette: PaletteColor[]
   targetImage: ImageData | null
+  history: HistoryEntry[]
   onDragEnter?: (event: DragEvent<HTMLDivElement>) => void
   onDragLeave?: () => void
   onDragOver?: (event: DragEvent<HTMLDivElement>) => void
@@ -270,6 +275,7 @@ export function ImageComparePanel({
   onExpandResult?: () => void
   onExpandTarget?: () => void
   onPromoteResultToTargetForPalette?: () => void
+  onSavePixelEdit?: (imageData: ImageData) => void
   onSetResultAsTarget?: () => void
 }) {
   const targetCanvasRef = useRef<HTMLCanvasElement>(null)
@@ -293,6 +299,7 @@ export function ImageComparePanel({
   const [lassoPoints, setLassoPoints] = useState<ImagePoint[]>([])
   const [paletteEdit, setPaletteEdit] = useState<PaletteEditState | null>(null)
   const [isTargetPaletteOpen, setIsTargetPaletteOpen] = useState(false)
+  const [isPixelPainting, setIsPixelPainting] = useState(false)
   const [tolerance, setTolerance] = useState(24)
   const selectedColor = selectedSample?.image === targetImage ? selectedSample.color : null
   const isPaletteEditing = Boolean(paletteEdit)
@@ -473,6 +480,7 @@ export function ImageComparePanel({
     clearSelectionToolState()
     setPaletteEdit(null)
     setIsTargetPaletteOpen(false)
+    setIsPixelPainting(false)
   }
 
   const updateDivider = (clientX: number) => {
@@ -712,6 +720,7 @@ export function ImageComparePanel({
     setToolMode((currentTool) => (currentTool === nextTool ? 'none' : nextTool))
     setPaletteEdit(null)
     setIsTargetPaletteOpen(false)
+    setIsPixelPainting(false)
     setSelectedSample(null)
     setManualSelection(null)
     setDragStart(null)
@@ -721,6 +730,7 @@ export function ImageComparePanel({
   const toggleTargetPalette = () => {
     clearSelectionToolState()
     setPaletteEdit(null)
+    setIsPixelPainting(false)
     if (resultImage && onPromoteResultToTargetForPalette) {
       onPromoteResultToTargetForPalette()
       setIsTargetPaletteOpen(true)
@@ -776,6 +786,24 @@ export function ImageComparePanel({
             }}
           >
             <Download size={13} />
+          </button>
+          <button
+            className={`inline-flex h-6 w-6 items-center justify-center rounded border text-zinc-700 disabled:cursor-not-allowed disabled:opacity-40 ${
+              isPixelPainting
+                ? 'border-cyan-600 bg-cyan-50 text-cyan-800'
+                : 'border-zinc-300 bg-white hover:bg-zinc-100'
+            }`}
+            disabled={!targetImage || !onSavePixelEdit}
+            title="Pixel paint"
+            type="button"
+            onClick={() => {
+              clearSelectionToolState()
+              setPaletteEdit(null)
+              setIsTargetPaletteOpen(false)
+              setIsPixelPainting((current) => !current)
+            }}
+          >
+            <Paintbrush size={13} />
           </button>
           <button
             className={`inline-flex h-6 w-6 items-center justify-center rounded border text-zinc-700 disabled:cursor-not-allowed disabled:opacity-40 ${
@@ -880,6 +908,19 @@ export function ImageComparePanel({
           </button>
         </div>
       </div>
+      {isPixelPainting && targetImage && onSavePixelEdit ? (
+        <PixelPaintPanel
+          fileInputRef={fileInputRef}
+          history={history}
+          targetImage={targetImage}
+          onClose={() => setIsPixelPainting(false)}
+          onSave={(imageData) => {
+            onSavePixelEdit(imageData)
+            setIsPixelPainting(false)
+          }}
+        />
+      ) : (
+        <>
       {toolMode === 'color' ? (
         <div className="flex min-h-9 flex-wrap items-center gap-2 border-b border-zinc-300 bg-white px-2 py-1.5 text-[11px] text-zinc-600">
           <div className="flex items-center gap-1.5">
@@ -1209,6 +1250,8 @@ export function ImageComparePanel({
           </div>
         </div>
       </div>
+        </>
+      )}
     </div>
   )
 }

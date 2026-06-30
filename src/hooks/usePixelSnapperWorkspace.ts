@@ -309,6 +309,20 @@ export function usePixelSnapperWorkspace() {
     }
   }
 
+  const savePixelEdit = (imageData: ImageData) => {
+    if (!currentImage || isProcessing) {
+      return
+    }
+
+    const editedImage = cloneImageData(imageData)
+    const nextLabel = `Pixel Edit #${history.length}`
+    setCurrentImage({ ...currentImage, imageData: editedImage })
+    setPreviewImage(null)
+    setResultPalette([])
+    setError(null)
+    pushHistory(nextLabel, currentImage.fileName, editedImage)
+  }
+
   const openExpanded = (label: string, fileName: string, imageData: ImageData) => {
     setExpandedImage({ label, fileName, imageData })
   }
@@ -337,6 +351,7 @@ export function usePixelSnapperWorkspace() {
     resultPalette,
     resetActiveConfig,
     resizeConfig,
+    savePixelEdit,
     setExpandedImage,
     setActiveMethod,
     setHistoryEntryAsTarget,
