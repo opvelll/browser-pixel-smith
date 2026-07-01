@@ -20,6 +20,7 @@ https://opvelll.github.io/browser-pixel-smith/
 - 大きな画像をピクセル境界に寄せる Pixel Snap 処理
 - リサイズ処理
 - パレット色の置換、色の切り抜き、範囲選択による切り抜き
+- ドット単位で色を拾って塗れる簡易ピクセルペイント
 - 処理履歴からの再表示、再適用
 - 結果画像の PNG 書き出し
 
@@ -76,6 +77,7 @@ This repository is configured for GitHub Pages with Vite's `base` set to `/brows
 - Pixel Snap processing for aligning large images to pixel boundaries
 - Image resizing
 - Palette color replacement, color cutout, and selection-based cropping
+- Simple pixel paint for picking colors and editing individual pixels
 - Reopen and reuse images from the processing history
 - Export result images as PNG
 
